@@ -179,3 +179,9 @@ web/data/*.ipynb
 tmp.py
 internal/*
 .indexed
+
+# Project-specific generated files
+*.log
+*.txt
+nb/src/data/knowledge_graph.db
+mlruns/
