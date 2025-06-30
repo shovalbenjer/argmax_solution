@@ -1,3 +1,20 @@
+"""Flask web application for recipe search and dietary classification.
+
+This application serves a web interface that allows users to search for recipes
+by ingredients. It uses an OpenSearch backend for efficient full-text search
+and integrates custom classifiers to determine if recipes meet dietary
+requirements like 'keto' or 'vegan'.
+
+The application is structured with the following endpoints:
+    - `/`: Renders the main search page (`index.html`).
+    - `/select2`: An API endpoint for ingredient autocomplete, compatible with
+      the Select2 JavaScript library.
+    - `/search`: The core API endpoint that performs recipe searches based on
+      user-selected ingredients and returns classified results.
+
+The application initializes a connection to OpenSearch on startup and pre-loads
+all available ingredients into memory to provide fast autocomplete suggestions.
+"""
 from flask import Flask, request, jsonify, render_template
 from opensearchpy import OpenSearch
 from decouple import config
@@ -22,7 +39,20 @@ app = Flask(__name__)
 
 
 def wait_for_opensearch(client, max_retries=30, retry_interval=2):
-    """Wait for OpenSearch to be ready"""
+    """Polls the OpenSearch client to wait for the service to be ready.
+
+    This function attempts to connect to OpenSearch by repeatedly calling the
+    client's `ping()` method. It is used to ensure that the web application
+    does not start before its database backend is available.
+
+    Args:
+        client (opensearchpy.OpenSearch): The OpenSearch client instance.
+        max_retries (int): The maximum number of connection attempts.
+        retry_interval (int): The delay in seconds between retries.
+
+    Returns:
+        bool: True if the connection succeeds, False otherwise.
+    """
     print("Waiting for OpenSearch to be ready...")  # Simple status message
     for i in range(max_retries):
         try:
@@ -39,7 +69,21 @@ def wait_for_opensearch(client, max_retries=30, retry_interval=2):
 
 
 def init_opensearch():
-    """Initialize OpenSearch client and wait for it to be ready"""
+    """Initializes the OpenSearch connection and pre-loads ingredient data.
+
+    Called on application startup, this function configures the OpenSearch
+    client, waits for the service to be available, and then loads all unique
+    ingredient names from the 'ingredients' index into memory. This in-memory
+    list is used to power the fast autocomplete search feature.
+
+    Returns:
+        tuple[opensearchpy.OpenSearch, list[str]]: A tuple containing the
+            initialized OpenSearch client and the list of ingredient names.
+
+    Raises:
+        SystemExit: If the application fails to connect to OpenSearch after
+            multiple retries.
+    """
     client = OpenSearch(
         hosts=[config('OPENSEARCH_URL', 'http://localhost:9200')],
         http_auth=None,
@@ -74,11 +118,29 @@ logger.info("Application initialization completed successfully")
 
 @app.route('/')
 def home():
+    """Renders the main home page.
+
+    This route serves the `index.html` template, which is the main user
+    interface for the recipe search application.
+    """
     return render_template('index.html')
 
 
 @app.route("/select2", methods=["GET"])
 def select2():
+    """Provides a JSON API for ingredient autocomplete.
+
+    This endpoint is designed to work with the Select2 JavaScript library. It
+    searches the in-memory list of ingredients based on the query parameter 'q'
+    and returns a JSON response in the format expected by Select2.
+
+    The results are sorted by the length of the ingredient name to prioritize
+    shorter, more specific matches.
+
+    Returns:
+        flask.Response: A JSON response containing the list of matching
+            ingredients.
+    """
     q = request.args.get("q", "").strip()
     results = [{"id": id_, "text": txt_}
                for id_, txt_ in enumerate(ingredients) if q in txt_]
@@ -88,6 +150,20 @@ def select2():
 
 @app.route('/search', methods=['GET'])
 def search_by_ingredients():
+    """Searches for recipes and returns classified results.
+
+    This is the primary search endpoint. It receives a list of ingredient IDs,
+    constructs a fuzzy `match` query for OpenSearch, and executes it against
+    the 'recipes' index.
+
+    For each search hit, it performs on-the-fly dietary classification by
+    calling the `is_keto` and `is_vegan` functions. The final results, including
+    recipe details and classification flags, are returned as a JSON object.
+
+    Returns:
+        flask.Response: A JSON response containing the search results, or an
+            error message if the request is invalid or the search fails.
+    """
     ingredient = request.args.get('q', '')
     if not ingredient:
         return jsonify({'error': 'Please provide an ingredient name'}), 400

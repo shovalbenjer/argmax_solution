@@ -1,25 +1,37 @@
-FROM jupyter/base-notebook
-WORKDIR /usr/src/app
+FROM python:3.11-slim
 
-USER root
-RUN apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    apt-get update && \
-    apt-get install -y \
+WORKDIR /app
+
+# Install system dependencies first, as they change infrequently
+RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Create directory as root and set proper ownership
-RUN mkdir -p /usr/src/data && \
-    chown -R $NB_UID:$NB_GID /usr/src/data
+# --- Optimized Caching for Python Dependencies ---
+# 1. Copy only the requirements file first.
+# As long as this file doesn't change, Docker will use the cached layer for pip install.
+COPY nb/requirements.txt .
 
-USER $NB_UID
-RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_sample.csv -o /usr/src/data/ground_truth_sample.csv
+# 2. Install dependencies. This is the most time-consuming layer.
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install dependencies from requirements.txt
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt && rm requirements.txt
-ENV JUPYTER_ENABLE_LAB=yes
+# 3. Now, copy the rest of the application code.
+# Changes to your source code will now only invalidate this layer and subsequent ones.
+COPY nb/src /app/src
+COPY tests /app/tests
+COPY nb/setup.py /app/setup.py
 
-CMD ["start-notebook.sh", "--NotebookApp.token=''", "--NotebookApp.password=''"]
+# --- Application Setup ---
+# Create data directory (can be done here, as it's a fast operation)
+RUN mkdir -p /app/data
+
+# Download NLTK data required by the parser
+RUN python -c "import nltk; nltk.download('punkt'); nltk.download('wordnet')"
+
+# Expose the port
+EXPOSE 8888
+
+# Set the entrypoint to run Jupyter Lab
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--notebook-dir=/app", "--ServerApp.token=''", "--ServerApp.password=''"]

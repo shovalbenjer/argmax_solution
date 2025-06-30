@@ -1,7 +1,35 @@
-Flask[async]==3.0.2
+# Requirements for the Notebook (nb) environment
+# --- Core Dependencies for Argmax Challenge Web App ---
+Flask==3.1.0
+pandas==2.2.3
+scikit-learn==1.6.1
 opensearch-py==2.8.0
 python-decouple==3.8
 requests==2.32.3
-pandas==2.2.3
-pyarrow==19.0.1
+tqdm # Added for progress bar
+# Core Data & Utilities
+polars
+pandas
+python-decouple
+requests
 tqdm
+fsspec
+openpyxl
+
+# Database & Search
+# sqlite3 # Removed as it's a built-in module
+chromadb==1.0.13
+opensearch-py
+
+# Ingredient Parsing & NLP
+ingredient-parser-nlp
+nltk
+rapidfuzz
+
+# Machine Learning & LLMs
+transformers>=4.51.0
+accelerate
+bitsandbytes # For 4-bit quantization with LLMs
+sentence-transformers>=2.7.0
+huggingface_hub
+google-generativeai 

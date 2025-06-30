@@ -1,0 +1,405 @@
+models.text
+jury:
+1. https://huggingface.co/google/gemma-3-1b-it
+$ pip install -U transformers
+
+Then, copy the snippet from the section that is relevant for your use case.
+
+Running with the pipeline API
+With instruction-tuned models, you need to use chat templates to process our inputs first. Then, you can pass it to the pipeline.
+
+from transformers import pipeline
+import torch
+
+pipe = pipeline("text-generation", model="google/gemma-3-1b-it", device="cuda", torch_dtype=torch.bfloat16)
+
+messages = [
+    [
+        {
+            "role": "system",
+            "content": [{"type": "text", "text": "You are a helpful assistant."},]
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"},]
+        },
+    ],
+]
+
+output = pipe(messages, max_new_tokens=50)
+
+Running the model on a single / multi GPU
+from transformers import AutoTokenizer, BitsAndBytesConfig, Gemma3ForCausalLM
+import torch
+
+model_id = "google/gemma-3-1b-it"
+
+quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+
+model = Gemma3ForCausalLM.from_pretrained(
+    model_id, quantization_config=quantization_config
+).eval()
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+messages = [
+    [
+        {
+            "role": "system",
+            "content": [{"type": "text", "text": "You are a helpful assistant."},]
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"},]
+        },
+    ],
+]
+inputs = tokenizer.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device).to(torch.bfloat16)
+
+
+with torch.inference_mode():
+    outputs = model.generate(**inputs, max_new_tokens=64)
+
+outputs = tokenizer.batch_decode(outputs)
+
+----
+2. https://huggingface.co/microsoft/Phi-4-mini-instruct
+Tokenizer
+Phi-4-mini-instruct supports a vocabulary size of up to 200064 tokens. The tokenizer files already provide placeholder tokens that can be used for downstream fine-tuning, but they can also be extended up to the model's vocabulary size.
+
+Input Formats
+Given the nature of the training data, the Phi-4-mini-instruct model is best suited for prompts using specific formats. Below are the two primary formats:
+
+Chat format
+This format is used for general conversation and instructions:
+
+<|system|>Insert System Message<|end|><|user|>Insert User Message<|end|><|assistant|>
+
+Tool-enabled function-calling format
+This format is used when the user wants the model to provide function calls based on the given tools. The user should provide the available tools in the system prompt, wrapped by <|tool|> and <|/tool|> tokens. The tools should be specified in JSON format, using a JSON dump structure. Example:
+
+<|system|>You are a helpful assistant with some tools.<|tool|>[{"name": "get_weather_updates", "description": "Fetches weather updates for a given city using the RapidAPI Weather API.", "parameters": {"city": {"description": "The name of the city for which to retrieve weather information.", "type": "str", "default": "London"}}}]<|/tool|><|end|><|user|>What is the weather like in Paris today?<|end|><|assistant|>
+
+Inference with vLLM
+Requirements
+List of required packages:
+
+flash_attn==2.7.4.post1
+torch==2.5.1
+vllm>=0.7.3
+
+Example
+To perform inference using vLLM, you can use the following code snippet:
+
+from vllm import LLM, SamplingParams
+
+llm = LLM(model="microsoft/Phi-4-mini-instruct", trust_remote_code=True)
+
+messages = [
+    {"role": "system", "content": "You are a helpful AI assistant."},
+    {"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"},
+    {"role": "assistant", "content": "Sure! Here are some ways to eat bananas and dragonfruits together: 1. Banana and dragonfruit smoothie: Blend bananas and dragonfruits together with some milk and honey. 2. Banana and dragonfruit salad: Mix sliced bananas and dragonfruits together with some lemon juice and honey."},
+    {"role": "user", "content": "What about solving an 2x + 3 = 7 equation?"},
+]
+
+sampling_params = SamplingParams(
+  max_tokens=500,
+  temperature=0.0,
+)
+
+output = llm.chat(messages=messages, sampling_params=sampling_params)
+print(output[0].outputs[0].text)
+
+Inference with Transformers
+Requirements
+Phi-4 family has been integrated in the 4.49.0 version of transformers. The current transformers version can be verified with: pip list | grep transformers. Python 3.8 and 3.10 will work best. List of required packages:
+
+flash_attn==2.7.4.post1
+torch==2.5.1
+transformers==4.49.0
+accelerate==1.3.0
+
+Phi-4-mini-instruct is also available in Azure AI Studio
+
+Example
+After obtaining the Phi-4-mini-instruct model checkpoints, users can use this sample code for inference.
+
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+ 
+torch.random.manual_seed(0)
+
+model_path = "microsoft/Phi-4-mini-instruct"
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_path,
+    device_map="auto",
+    torch_dtype="auto",
+    trust_remote_code=True,
+)
+tokenizer = AutoTokenizer.from_pretrained(model_path)
+ 
+messages = [
+    {"role": "system", "content": "You are a helpful AI assistant."},
+    {"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"},
+    {"role": "assistant", "content": "Sure! Here are some ways to eat bananas and dragonfruits together: 1. Banana and dragonfruit smoothie: Blend bananas and dragonfruits together with some milk and honey. 2. Banana and dragonfruit salad: Mix sliced bananas and dragonfruits together with some lemon juice and honey."},
+    {"role": "user", "content": "What about solving an 2x + 3 = 7 equation?"},
+]
+ 
+pipe = pipeline(
+    "text-generation",
+    model=model,
+    tokenizer=tokenizer,
+)
+ 
+generation_args = {
+    "max_new_tokens": 500,
+    "return_full_text": False,
+    "temperature": 0.0,
+    "do_sample": False,
+}
+ 
+output = pipe(messages, **generation_args)
+print(output[0]['generated_text'])
+
+3. https://huggingface.co/Qwen/Qwen3-0.6B-GGUF
+Quickstart
+llama.cpp
+Check out our llama.cpp documentation for more usage guide.
+
+We advise you to clone llama.cpp and install it following the official guide. We follow the latest version of llama.cpp. In the following demonstration, we assume that you are running commands under the repository llama.cpp.
+
+./llama-cli -hf Qwen/Qwen3-0.6B-GGUF:Q8_0 --jinja --color -ngl 99 -fa -sm row --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0 --presence-penalty 1.5 -c 40960 -n 32768 --no-context-shift
+
+ollama
+Check out our ollama documentation for more usage guide.
+
+You can run Qwen3 with one command:
+
+ollama run hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0
+
+Switching Between Thinking and Non-Thinking Mode
+You can add /think and /no_think to user prompts or system messages to switch the model's thinking mode from turn to turn. The model will follow the most recent instruction in multi-turn conversations.
+
+Here is an example of multi-turn conversation:
+
+> Who are you /no_think
+
+<think>
+
+</think>
+
+I am Qwen, a large-scale language model developed by Alibaba Cloud. [...]
+
+> How many 'r's are in 'strawberries'? /think
+
+<think>
+Okay, let's see. The user is asking how many times the letter 'r' appears in the word "strawberries". [...]
+</think>
+
+The word strawberries contains 3 instances of the letter r. [...]
+
+Best Practices
+To achieve optimal performance, we recommend the following settings:
+
+Sampling Parameters:
+
+For thinking mode (enable_thinking=True), use Temperature=0.6, TopP=0.95, TopK=20, MinP=0, and PresencePenalty=1.5. DO NOT use greedy decoding, as it can lead to performance degradation and endless repetitions.
+For non-thinking mode (enable_thinking=False), we suggest using Temperature=0.7, TopP=0.8, TopK=20, MinP=0, and PresencePenalty=1.5.
+We recommend setting presence_penalty to 1.5 for quantized models to suppress repetitive outputs. You can adjust the presence_penalty parameter between 0 and 2. A higher value may occasionally lead to language mixing and a slight reduction in model performance.
+Adequate Output Length: We recommend using an output length of 32,768 tokens for most queries. For benchmarking on highly complex problems, such as those found in math and programming competitions, we suggest setting the max output length to 38,912 tokens. This provides the model with sufficient space to generate detailed and comprehensive responses, thereby enhancing its overall performance.
+
+Standardize Output Format: We recommend using prompts to standardize model outputs when benchmarking.
+
+Math Problems: Include "Please reason step by step, and put your final answer within \boxed{}." in the prompt.
+Multiple-Choice Questions: Add the following JSON structure to the prompt to standardize responses: "Please show your choice in the answer field with only the choice letter, e.g., "answer": "C"."
+No Thinking Content in History: In multi-turn conversations, the historical model output should only include the final output part and does not need to include the thinking content. It is implemented in the provided chat template in Jinja2. However, for frameworks that do not directly use the Jinja2 chat template, it is up to the developers to ensure that the best practice is followed.
+    
+Retrival system:
+1. https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF
+
+Usage
+📌 Tip: We recommend that developers customize the instruct according to their specific scenarios, tasks, and languages. Our tests have shown that in most retrieval scenarios, not using an instruct on the query side can lead to a drop in retrieval performance by approximately 1% to 5%.
+
+llama.cpp
+Check out our llama.cpp documentation for more usage guide.
+
+We advise you to clone llama.cpp and install it following the official guide. We follow the latest version of llama.cpp. In the following demonstration, we assume that you are running commands under the repository llama.cpp.
+
+You can run Qwen3 Embedding with one command:
+
+./build/bin/llama-embedding -m model.gguf  -p "<your context here><|endoftext|>"  --pooling last --verbose-prompt --embd-normalize 2
+
+Or lunch a server:
+
+./build/bin/llama-server -m model.gguf --embedding --pooling last -ub 8192 --verbose-prompt
+
+📌 Tip: Qwen3 Embedding models default to using the last token as <|endoftext|>, so you need to manually append this token to the end of your own input context. In addition, when running the llama-server, you also need to manually normalize the output embeddings as llama-server currently does not support the --embd-normalize option.
+
+2. https://huggingface.co/Qwen/Qwen3-Reranker-0.6B
+
+sage
+With Transformers versions earlier than 4.51.0, you may encounter the following error:
+
+KeyError: 'qwen3'
+
+Transformers Usage
+# Requires transformers>=4.51.0
+import torch
+from transformers import AutoModel, AutoTokenizer, AutoModelForCausalLM
+
+def format_instruction(instruction, query, doc):
+    if instruction is None:
+        instruction = 'Given a web search query, retrieve relevant passages that answer the query'
+    output = "<Instruct>: {instruction}\n<Query>: {query}\n<Document>: {doc}".format(instruction=instruction,query=query, doc=doc)
+    return output
+
+def process_inputs(pairs):
+    inputs = tokenizer(
+        pairs, padding=False, truncation='longest_first',
+        return_attention_mask=False, max_length=max_length - len(prefix_tokens) - len(suffix_tokens)
+    )
+    for i, ele in enumerate(inputs['input_ids']):
+        inputs['input_ids'][i] = prefix_tokens + ele + suffix_tokens
+    inputs = tokenizer.pad(inputs, padding=True, return_tensors="pt", max_length=max_length)
+    for key in inputs:
+        inputs[key] = inputs[key].to(model.device)
+    return inputs
+
+
+def compute_logits(inputs, **kwargs):
+    batch_scores = model(**inputs).logits[:, -1, :]
+    true_vector = batch_scores[:, token_true_id]
+    false_vector = batch_scores[:, token_false_id]
+    batch_scores = torch.stack([false_vector, true_vector], dim=1)
+    batch_scores = torch.nn.functional.log_softmax(batch_scores, dim=1)
+    scores = batch_scores[:, 1].exp().tolist()
+    return scores
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-Reranker-0.6B", padding_side='left')
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-Reranker-0.6B").eval()
+# We recommend enabling flash_attention_2 for better acceleration and memory saving.
+# model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-Reranker-0.6B", torch_dtype=torch.float16, attn_implementation="flash_attention_2").cuda().eval()
+token_false_id = tokenizer.convert_tokens_to_ids("no")
+token_true_id = tokenizer.convert_tokens_to_ids("yes")
+max_length = 8192
+
+prefix = "<|im_start|>system\nJudge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be \"yes\" or \"no\".<|im_end|>\n<|im_start|>user\n"
+suffix = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+prefix_tokens = tokenizer.encode(prefix, add_special_tokens=False)
+suffix_tokens = tokenizer.encode(suffix, add_special_tokens=False)
+        
+task = 'Given a web search query, retrieve relevant passages that answer the query'
+
+queries = ["What is the capital of China?",
+    "Explain gravity",
+]
+
+documents = [
+    "The capital of China is Beijing.",
+    "Gravity is a force that attracts two bodies towards each other. It gives weight to physical objects and is responsible for the movement of planets around the sun.",
+]
+
+pairs = [format_instruction(task, query, doc) for query, doc in zip(queries, documents)]
+
+# Tokenize the input texts
+inputs = process_inputs(pairs)
+scores = compute_logits(inputs)
+
+print("scores: ", scores)
+
+vLLM Usage
+# Requires vllm>=0.8.5
+import logging
+from typing import Dict, Optional, List
+
+import json
+import logging
+
+import torch
+
+from transformers import AutoTokenizer, is_torch_npu_available
+from vllm import LLM, SamplingParams
+from vllm.distributed.parallel_state import destroy_model_parallel
+import gc
+import math
+from vllm.inputs.data import TokensPrompt
+
+
+        
+def format_instruction(instruction, query, doc):
+    text = [
+        {"role": "system", "content": "Judge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be \"yes\" or \"no\"."},
+        {"role": "user", "content": f"<Instruct>: {instruction}\n\n<Query>: {query}\n\n<Document>: {doc}"}
+    ]
+    return text
+
+def process_inputs(pairs, instruction, max_length, suffix_tokens):
+    messages = [format_instruction(instruction, query, doc) for query, doc in pairs]
+    messages =  tokenizer.apply_chat_template(
+        messages, tokenize=True, add_generation_prompt=False, enable_thinking=False
+    )
+    messages = [ele[:max_length] + suffix_tokens for ele in messages]
+    messages = [TokensPrompt(prompt_token_ids=ele) for ele in messages]
+    return messages
+
+def compute_logits(model, messages, sampling_params, true_token, false_token):
+    outputs = model.generate(messages, sampling_params, use_tqdm=False)
+    scores = []
+    for i in range(len(outputs)):
+        final_logits = outputs[i].outputs[0].logprobs[-1]
+        token_count = len(outputs[i].outputs[0].token_ids)
+        if true_token not in final_logits:
+            true_logit = -10
+        else:
+            true_logit = final_logits[true_token].logprob
+        if false_token not in final_logits:
+            false_logit = -10
+        else:
+            false_logit = final_logits[false_token].logprob
+        true_score = math.exp(true_logit)
+        false_score = math.exp(false_logit)
+        score = true_score / (true_score + false_score)
+        scores.append(score)
+    return scores
+
+number_of_gpu = torch.cuda.device_count()
+tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen3-Reranker-0.6B')
+model = LLM(model='Qwen/Qwen3-Reranker-0.6B', tensor_parallel_size=number_of_gpu, max_model_len=10000, enable_prefix_caching=True, gpu_memory_utilization=0.8)
+tokenizer.padding_side = "left"
+tokenizer.pad_token = tokenizer.eos_token
+suffix = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+max_length=8192
+suffix_tokens = tokenizer.encode(suffix, add_special_tokens=False)
+true_token = tokenizer("yes", add_special_tokens=False).input_ids[0]
+false_token = tokenizer("no", add_special_tokens=False).input_ids[0]
+sampling_params = SamplingParams(temperature=0, 
+    max_tokens=1,
+    logprobs=20, 
+    allowed_token_ids=[true_token, false_token],
+)
+
+        
+task = 'Given a web search query, retrieve relevant passages that answer the query'
+queries = ["What is the capital of China?",
+    "Explain gravity",
+]
+documents = [
+    "The capital of China is Beijing.",
+    "Gravity is a force that attracts two bodies towards each other. It gives weight to physical objects and is responsible for the movement of planets around the sun.",
+]
+
+pairs = list(zip(queries, documents))
+inputs = process_inputs(pairs, task, max_length-len(suffix_tokens), suffix_tokens)
+scores = compute_logits(model, inputs, sampling_params, true_token, false_token)
+print('scores', scores)
+
+destroy_model_parallel()
+
+📌 Tip: We recommend that developers customize the instruct according to their specific scenarios, tasks, and languages. Our tests have shown that in most retrieval scenarios, not using an instruct on the query side can lead to a drop in retrieval performance by approximately 1% to 5%.

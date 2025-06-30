@@ -1,9 +1,48 @@
-ipywidgets==8.1.2
+# Base requirements
+polars==1.31.0
+pydantic==2.11.7
 scikit-learn==1.6.1
+ingredient-parser-nlp==2.1.1
+llama-cpp-python==0.3.9
+loguru==0.7.3
+
+# Performance
+numba==0.61.2
+cython==3.1.2
+
+# MLOps
+mlflow==3.1.1
+
+# Testing
+pytest==8.4.1
+duckdb==1.3.1 # For in-memory db testing
+
+# Additional requirements
+ipywidgets==8.1.2
 matplotlib==3.10.1
 opensearch-py==2.8.0
 python-decouple==3.8
 requests==2.32.3
 pandas==2.2.3
 pyarrow==19.0.1
-scikit-learn==1.6.1
+rapidfuzz==3.13.0
+nltk==3.9.1
+elasticsearch==8.14.0
+
+# Jupyter Environment
+jupyterlab==4.4.4
+
+# Embeddings & LLM Execution
+# For generating embeddings and running the Qwen model
+torch==2.7.1
+transformers==4.53.0
+accelerate==1.8.1
+bitsandbytes==0.46.0
+
+# For Ground Truth Generation with Gemini
+google-generativeai==0.8.5
+python-dotenv==1.1.1
+
+# Evaluation
+seaborn==0.13.2
+huggingface-hub==0.33.1

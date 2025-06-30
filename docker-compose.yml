@@ -50,14 +50,12 @@ services:
 
   nb:
     build:
-      context: nb
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: nb/Dockerfile
     environment:
       - OPENSEARCH_URL=http://os:9200
     ports:
       - "8888:8888"
-    volumes:
-      - ./nb/src:/usr/src/app
     networks:
       - argmax
     depends_on:

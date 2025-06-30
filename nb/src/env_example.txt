@@ -1,0 +1,9 @@
+# This is an example environment configuration file.
+# For the application to work with private Hugging Face models,
+# or to avoid rate limits, you should provide your token.
+
+# 1. Create a new file named .env in the `nb/src/` directory.
+# 2. Get your Hugging Face Hub token from https://huggingface.co/settings/tokens
+# 3. Paste the following line into your .env file, replacing with your token:
+
+HUGGING_FACE_HUB_TOKEN="your_hf_token_here" 
