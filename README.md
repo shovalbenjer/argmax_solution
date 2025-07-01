@@ -38,3 +38,8 @@ The system's core is a "Hybrid Retrieval Cascade," an intelligent, multi-step pr
 *   **Final "Student" Judge LLM (`Qwen3-0.6B-GGUF`):**
     *   **Capability:** A 0.6B parameter model with a 32k context length, optimized for instruction following and reasoning.
     *   **Advantage:** Run efficiently via **Ollama**, it features a unique **"thinking mode"** that can be toggled on for complex logical tasks, providing a balance between high-speed performance for simple ingredients and deep reasoning for complex ones.
+
+
+### **Data Flow**
+
+![image](https://github.com/user-attachments/assets/472b4450-bb02-4843-9fef-0b48137e7635)
