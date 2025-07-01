@@ -1,5 +1,5 @@
 import pandas as pd
-from ingredient_parser.core import parse_ingredient
+from ingredient_parser import parse_ingredient
 from loguru import logger
 from rapidfuzz import process, fuzz
 from typing import List, Dict
