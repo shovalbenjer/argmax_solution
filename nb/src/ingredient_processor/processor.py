@@ -1,9 +1,27 @@
 import pandas as pd
 from ingredient_parser.core import parse_ingredient
 from loguru import logger
+from rapidfuzz import process, fuzz
+from typing import List, Dict
 
 # Use the centralized db connection from our new utility
 from utils.db import get_db_connection
+
+# --- Database Access ---
+def get_all_ingredient_names() -> List[str]:
+    """Fetches all unique ingredient names from the knowledge graph for fuzzy matching."""
+    with get_db_connection() as conn:
+        return pd.read_sql("SELECT DISTINCT name FROM nutrition_facts", conn)['name'].tolist()
+
+# Pre-load names for rapidfuzz
+ALL_INGREDIENT_NAMES = get_all_ingredient_names()
+
+def get_nutrition_data_batch(ingredient_names: List[str]) -> Dict[str, Dict]:
+    """Retrieves nutritional data for a batch of ingredients."""
+    with get_db_connection() as conn:
+        query = f"SELECT * FROM nutrition_facts WHERE name IN ({','.join(['?']*len(ingredient_names))})"
+        df = pd.read_sql(query, conn, params=ingredient_names)
+        return {row['name']: row for row in df.to_dict('records')}
 
 def get_nutrition_data(ingredient_name: str) -> dict | None:
     """Retrieves nutritional data for an ingredient from the knowledge graph.
@@ -79,85 +97,44 @@ def get_vegan_info(ingredient_name: str) -> dict | None:
             return {"is_vegan_term": bool(df.iloc[0]['is_vegan'])}
     return None
 
-
-def get_ingredient_context(raw_ingredient: str) -> dict:
-    """Analyzes a raw ingredient string and returns a structured, enriched context.
-
-    Detailed Description:
-        - This function orchestrates the full analysis of a single ingredient string.
-        - **1. Parsing:** It uses the `ingredient-parser` library to break down the raw string
-          into its constituent parts (name, quantity, unit). It includes error handling for
-          malformed strings.
-        - **2. Retrieval:** It calls the various getter functions (`get_nutrition_data`, `get_vegan_info`)
-          to retrieve all available information about the parsed ingredient name from the knowledge graph.
-        - **3. Normalization:** It performs a deterministic calculation of the total carbohydrates.
-          If a unit conversion is required (e.g., from "cups" to "grams"), it retrieves the
-          necessary multiplier and applies it.
-        - **4. Assembly:** It aggregates all the information—original, parsed, retrieved, and
-          normalized—into a single context dictionary, including any errors encountered.
-
-    Parameters:
-        - raw_ingredient (str): The raw ingredient string (e.g., "2 cups of flour").
-
-    Returns:
-        - dict: A dictionary containing the full context and analysis of the ingredient.
-
-    Libraries Used:
-        - ingredient_parser: For robustly parsing structured data from the ingredient string.
-        - loguru: For logging warnings and errors during the process.
+# --- Main Processor with Fallback ---
+def get_context_with_rapidfuzz_fallback(raw_ingredient: str) -> Dict:
     """
-    context = {
-        "original": raw_ingredient,
-        "parsed": {},
-        "retrieved_nutrition": {},
-        "normalized": {},
-        "vegan_info": {},
-        "errors": []
-    }
-
-    # 1. Ingredient Parsing
+    Analyzes a raw ingredient, trying an exact match first, then falling back
+    to rapidfuzz to find the top 3 potential matches.
+    """
+    context = {"original": raw_ingredient, "match_type": "none", "results": []}
+    
+    # 1. Parse the ingredient
     try:
         parsed = parse_ingredient(raw_ingredient)
-        # ingredient-parser sometimes returns a list, sometimes a single object
-        name_obj = parsed.name[0] if isinstance(parsed.name, list) else parsed.name
-        name = name_obj.text
+        name = (parsed.name[0] if isinstance(parsed.name, list) else parsed.name).text
+    except Exception:
+        name = raw_ingredient.lower().strip()
 
-        unit_text = parsed.amount[0].unit if parsed.amount and parsed.amount[0].unit else "unit"
-        quantity = float(parsed.amount[0].quantity) if parsed.amount else 1.0
+    # 2. Try for an exact match
+    exact_match = get_nutrition_data_batch([name])
+    if exact_match:
+        context['match_type'] = 'exact'
+        context['results'] = list(exact_match.values())
+        return context
 
-        context['parsed'] = {"name": name, "quantity": quantity, "unit": unit_text}
-    except Exception as e:
-        logger.warning(f"Parsing failed for '{raw_ingredient}': {e}. Using raw string.")
-        context['errors'].append(f"Parsing failed: {e}")
-        context['parsed'] = {"name": raw_ingredient.lower().strip(), "quantity": 1.0, "unit": "unit"}
-        name = context['parsed']['name']
+    # 3. Fallback to rapidfuzz if no exact match
+    context['match_type'] = 'fallback'
+    fuzzy_matches = process.extract(name, ALL_INGREDIENT_NAMES, scorer=fuzz.WRatio, limit=3)
+    
+    if not fuzzy_matches:
+        return context # No fallback matches found
 
-    # 2. Symbolic Retrieval (from knowledge_graph.db)
-    retrieved_nutrition = get_nutrition_data(name)
-    if retrieved_nutrition:
-        context['retrieved_nutrition'] = retrieved_nutrition
-
-    # 3. Deterministic Normalization Engine
-    if retrieved_nutrition and context['parsed']['unit'] != 'unit':
-        base_carbs = retrieved_nutrition.get('carbohydrates_g', 0) or 0
-        
-        multiplier = 1.0
-        # If the unit is not a weight, we need to convert it to grams
-        if context['parsed']['unit'].lower() not in ['g', 'gram', 'grams', 'oz', 'ounce', 'ounces', 'lb', 'lbs', 'pound', 'pounds']:
-             multiplier = get_unit_conversion(name, context['parsed']['unit'])
-
-        if multiplier:
-            # Placeholder for actual weight conversion logic if needed
-            grams_quantity = context['parsed']['quantity'] * multiplier
-            # Nutrition facts are per 100g
-            calculated_carbs = (base_carbs / 100) * grams_quantity
-            context['normalized'] = {"calculated_carbs_g": calculated_carbs}
-        else:
-            context['errors'].append(f"No unit conversion found for '{name}' from '{context['parsed']['unit']}' to grams.")
+    # Get nutrition data for the fuzzy matches
+    match_names = [match[0] for match in fuzzy_matches]
+    fuzzy_nutrition = get_nutrition_data_batch(match_names)
+    
+    # Structure the results
+    for match_name, score, _ in fuzzy_matches:
+        if match_name in fuzzy_nutrition:
+            result = fuzzy_nutrition[match_name]
+            result['match_score'] = score
+            context['results'].append(result)
             
-    # 4. Vegan Check
-    vegan_info = get_vegan_info(name)
-    if vegan_info:
-        context['vegan_info'] = vegan_info
-
     return context 
