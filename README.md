@@ -1,75 +1,40 @@
 # 🥑 Search By Ingredients Challenge
 ![Argmax](https://argmaxml.com/wp-content/uploads/2024/04/Argmax_logo_inline.svg)
 
-🗓 Submission Deadline: June 30th, 2025
+### **Project Overview**
 
+This project implements a sophisticated, multi-tiered system to classify recipes as **Vegan** and **Keto-friendly**. The architecture is designed for maximum performance, accuracy, and full traceability by leveraging a high-performance Python stack (`uv`, `Polars`, `Numba`), advanced models for parsing and data retrieval, and a dual-LLM strategy managed by **Ollama** and tracked with **MLflow**.
 
-🎥 Please watch [this explainer video](https://youtu.be/rfdaZXseRro) to understand the task.
+### **Core Technology Stack**
 
-## 👋 Who Is This Repo For?
+*   **Package Management (`uv`):** We use `uv`, a high-performance Python package installer and resolver, to ensure rapid and reliable dependency management.
+*   **Data Manipulation (`Polars`):** All data processing is handled by Polars, a lightning-fast DataFrame library written in Rust. It provides a more memory-efficient and performant alternative to pandas.
+*   **Performance (`Numba`):** Critical numerical functions are JIT-compiled with Numba, translating Python code into optimized machine code for C-like speed.
+*   **LLM Serving (`Ollama`):** The local "Student" LLM is managed and served by Ollama, which simplifies the deployment and integration of large language models.
+*   **Experiment Tracking (`MLflow`):** All ground truth generation and evaluation runs are tracked with MLflow for a complete audit trail and reproducibility.
 
-[Argmax](https://www.argmaxml.com) is hiring Junior Data scientists in Israel (TLV) and the United States (NYC area).
-This repo is meant to be a the first step in the process and it will set the stage for the interview.
+### **Key Features & Architecture: The Hybrid Retrieval Cascade**
 
-The data is taken from a real-life scenario, and it reflects the type of work you will do at Argmax.
+The system's core is a "Hybrid Retrieval Cascade," an intelligent, multi-step process for analyzing each ingredient.
 
+*   **1. High-Accuracy Parsing:** An ingredient string is first processed by a specialized NLP model to reliably extract its core components.
+*   **2. Intelligent Knowledge Retrieval:** The extracted ingredient name is then used to query our `knowledge_graph.db`. This is not a simple lookup; it's an intelligent translation step:
+    *   **Text-to-SQL (`RSL-SQL`):** We use a **Robust Schema Linking (RSL-SQL)** model to translate the natural language ingredient name (e.g., "all-purpose flour") into a precise SQL query. This allows for flexible and intelligent probing of our structured knowledge graph, moving beyond simple keyword matching.
+    *   **Fallback Searches:** If the Text-to-SQL model fails, the system falls back to fuzzy and exact-match searches.
+*   **3. The Teacher/Student LLM Paradigm:**
+    *   **"Teacher" Model (Google Gemini):** A powerful, state-of-the-art model from Google's Gemini family is used via its API to create a high-quality, nuanced ground truth dataset. This provides the "source of truth" for our evaluations.
+    *   **"Student" Judge (Qwen via Ollama):** A small, fast, and efficient quantized model acts as the final judge for new recipes. It receives the rich, structured context from our retrieval cascade and makes the final classification.
 
-## 💼 About the Position
+### **Models & Capabilities**
 
-Argmax is a boutique consulting firm specializing in personalized search and recommendation systems. We work with medium to large-scale clients across retail, advertising, healthcare, and finance.
+*   **Parsing Model (`ingredient-parser-nlp`):**
+    *   **Capability:** Extracts `name`, `quantity`, and `unit` from unstructured ingredient text.
+    *   **Advantage:** Achieves **97.8% word-level accuracy**, providing a highly reliable and structured input for the rest of the pipeline, which minimizes cascading errors.
 
-We use tools like large language models, vector databases, and behavioral data to build personalization systems that actually deliver results.
+*   **Text-to-SQL Model (`rsl-text2sql`):**
+    *   **Capability:** Generates complex SQL queries from natural language inputs by robustly linking terms to the database schema.
+    *   **Advantage:** This is the core of our "intelligent retrieval." It allows the system to understand user-like queries about ingredients and fetch precise data from the `knowledge_graph.db`, making our analysis far more robust than simple lookups.
 
-We're looking for candidates who are:
-
--	✅ Proficient in Python
--	🔍 Naturally curious
--	🧠 Able to perform independent research
-
-This challenge is designed to simulate the type of problems you'll tackle with us, and it applies to positions in both our:
--	🇮🇱 Ramat Gan, Israel office
--	🇺🇸 North Bergen County, New Jersey office
-
-## 🎥 Past Project Talks
-
-1. [Uri's talk on Persona based evaluation with large language models](https://www.youtube.com/watch?v=44--JTG0aMg)
-1. [Benjamin Kempinski on offline metrics](https://www.youtube.com/watch?v=5OPa2RYL5VI)
-1. [Daniel Hen & Uri Goren on pricing with contextual bandits](https://www.youtube.com/watch?v=IJtNBbINKbI)
-1. [Eitan Zimmerman's talk on visual feed reranking](https://www.youtube.com/watch?v=q4uF8nF5SWk)
-
-## 🚀 Getting Started
-
-### 🛠️ Setup
-
-1.	Make sure Docker is installed on your machine.
-1.	Run the following in your terminal:  `docker compose build` and  `docker compose up -d`
-1. Open your browser and go to [localhost:8888](http://localhost:8888)
-1. Follow the instructions in the [task.ipynb](https://github.com/argmaxml/search_by_ingredients/blob/master/nb/src/task.ipynb) notebook
-
-### 📬 Submission Instructions
-
-1. **Clone** this repository into a **private GitHub repo** under your own account.
-1. **Invite** [argmax2025](https://github.com/argmax2025) as a collaborator.
-1. **Implement** the missing parts in the codebase.
-1. Once done, fill in the application form:
-1.1. [US Application Form](https://forms.clickup.com/25655193/f/rexwt-1832/L0YE9OKG2FQIC3AYRR) 
-1.1 [IL Application Form](https://forms.clickup.com/25655193/f/rexwt-1812/IP26WXR9X4P6I4LGQ6)
-1. We'll reach out to you after reviewing your submission.
-
-## 🧪 The Interview Process
-### 🧑‍💻 Hands-On Technical Interview (July 2025)
-
-1.	A 3-hour live coding session focused on your submitted solution.
-1.	You'll be asked to extend, modify, and explain parts of the codebase.
-1.	Please ensure you're in a quiet space with a workstation capable of running your solution.
-
-### 🏢 On-Site Interview (August-September 2025)
-
-1. A non-technical, in-person meeting at our offices in Ramat Gan or New Jersey.
-1. We’ll get to know you and discuss your goals.
-1. Successful candidates will receive offers around late August or early September.
-
-## ❓ Still Have Questions?
-
-Feel free to mail us at [challenge25@argmaxml.com](mailto:challenge25@argmaxml.com)
-
+*   **Final "Student" Judge LLM (`Qwen3-0.6B-GGUF`):**
+    *   **Capability:** A 0.6B parameter model with a 32k context length, optimized for instruction following and reasoning.
+    *   **Advantage:** Run efficiently via **Ollama**, it features a unique **"thinking mode"** that can be toggled on for complex logical tasks, providing a balance between high-speed performance for simple ingredients and deep reasoning for complex ones.
