@@ -1,35 +1,28 @@
-# Argmax Must-Have Requirements
+# Argmax-Mandated Requirements
+ipywidgets==8.1.2
+scikit-learn==1.6.1
+matplotlib==3.10.1
 opensearch-py==2.8.0
 python-decouple==3.8
 requests==2.32.3
 pandas==2.2.3
 pyarrow==19.0.1
-tqdm==4.66.4
 
-# Core Data Science & ML
-polars==1.31.0
-scikit-learn==1.7.0
-nltk==3.9.1
-ingredient-parser-nlp==2.1.1
-rapidfuzz==3.13.0
-loguru==0.7.3
-python-dotenv==1.1.1
-jupyterlab # Provided by base image
+# Core Dependencies for Shared Modules
+sqlalchemy
+loguru
+ollama
+ingredient-parser-nlp
 
-# LLM & MLOps
-ollama==0.5.1
-mlflow==3.1.1
-
-# Performance
-numba==0.61.2
-
-# Database
-sqlalchemy==2.0.22
-pydantic==2.11.7
-
-# Visualization & Notebook
-ipywidgets==8.1.7
-matplotlib==3.10.3
-seaborn==0.13.2
-plotly==5.22.0
-wordcloud==1.9.3
+# Research and ML Dependencies
+polars
+rapidfuzz
+python-dotenv
+mlflow
+numba
+pydantic
+tqdm
+plotly
+wordcloud
+nltk
+google-generativeai

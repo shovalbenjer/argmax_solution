@@ -16,13 +16,17 @@ The application initializes a connection to OpenSearch on startup and pre-loads
 all available ingredients into memory to provide fast autocomplete suggestions.
 """
 from flask import Flask, request, jsonify, render_template
-from opensearchpy import OpenSearch
-from decouple import config
-from diet_classifiers import is_keto, is_vegan
 from time import sleep
 import sys
 import logging
 import os
+
+# Add shared package to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
+from shared.config import app_config
+from shared.database import db_manager
+from shared.diet_classifiers import is_keto, is_vegan
 
 # Configure logging - keep it simple
 logging.basicConfig(
@@ -78,48 +82,21 @@ def wait_for_opensearch(client, max_retries=30, retry_interval=2):
 def init_opensearch():
     """Initializes OpenSearch connection and preloads ingredient data for autocomplete.
 
-    Detailed Description:
-        - This function handles the complete initialization of the OpenSearch backend.
-        - It creates an OpenSearch client with configuration from environment variables.
-        - It calls `wait_for_opensearch()` to ensure the service is available before proceeding.
-        - It performs a bulk query to load all ingredient names from the 'ingredients' index
-          into memory, which enables fast autocomplete responses without additional database queries.
-        - This initialization pattern separates concerns: connection management, service readiness,
-          and data preloading.
-
-    Returns:
-        - tuple[opensearchpy.OpenSearch, list[str]]: The initialized client and the list of
-          ingredient names for autocomplete functionality.
-
-    Raises:
-        - SystemExit: If OpenSearch connection fails or ingredient loading fails, the application
-          cannot function and must terminate.
-
-    Libraries Used:
-        - opensearchpy: The official Python client for OpenSearch, chosen over raw HTTP requests
-          for its connection pooling, error handling, and query building capabilities.
-        - decouple: For loading configuration from environment variables, providing flexibility
-          across different deployment environments.
+    Uses the shared database manager for consistent connection handling.
     """
-    client = OpenSearch(
-        hosts=[config('OPENSEARCH_URL', 'http://localhost:9200')],
-        http_auth=None,
-        use_ssl=False,
-        verify_certs=False,
-        ssl_show_warn=False,
-    )
+    client = db_manager.get_opensearch_client()
+    
+    if not client:
+        logger.error("OpenSearch connection failed")
+        sys.exit(1)
 
     if not wait_for_opensearch(client):
         logger.error("OpenSearch connection failed")
         sys.exit(1)
 
     try:
-        # Load all ingredients once OpenSearch is ready
-        response = client.search(index="ingredients", body={
-                                 "query": {"match_all": {}}}, size=10000)
-        ingredients = [hit["_source"]["ingredients"]
-                       for hit in response["hits"]["hits"]]
-        # Simple status message
+        # Load all ingredients using shared database manager
+        ingredients = db_manager.get_all_ingredients()
         print(f"Successfully loaded {len(ingredients)} ingredients")
         return client, ingredients
     except Exception as e:
@@ -233,25 +210,9 @@ def search_by_ingredients():
     ingredient_ids = [ingredients[id_] for id_ in ingredient_ids]
     ingredient = " ".join(ingredient_ids)
 
-    # Create the search query
-    query = {
-        "query": {
-            "match": {
-                "ingredients": {
-                    "query": ingredient,
-                    "fuzziness": "AUTO"
-                }
-            }
-        }
-    }
-
     try:
-        # Execute the search
-        response = client.search(
-            index="recipes",
-            body=query,
-            size=12
-        )
+        # Execute the search using shared database manager
+        response = db_manager.search_recipes(ingredient, size=12)
 
         # Format the results
         hits = response['hits']['hits']

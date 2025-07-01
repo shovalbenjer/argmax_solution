@@ -285,6 +285,6 @@ def main(args):
 if __name__ == "__main__":
     parser = ArgumentParser(description="Index recipe data into OpenSearch.")
     parser.add_argument("--opensearch_url", type=str, default="http://localhost:9200", help="OpenSearch URL.")
-    parser.add_argument("--data_file", type=str, default="data/recipes.parquet", help="Path to the Parquet data file.")
+    parser.add_argument("--data_file", type=str, default="/app/data/allrecipes.parquet", help="Path to the Parquet data file.")
     parser.add_argument("--batch_size", type=int, default=10240, help="Batch size for bulk indexing.")
     sys.exit(main(parser.parse_args()))

@@ -1,29 +1,30 @@
-# Use a slim Python image
 FROM python:3.11-slim
 
-# Set the working directory
 WORKDIR /app
 
-# --- Install uv (a faster pip) using a multi-stage build ---
-COPY --from=ghcr.io/astral-sh/uv:0.7.17 /uv /usr/local/bin/
-
-# --- System Dependencies ---
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Python Dependencies (Optimized for Caching) ---
+# Create data directory
+RUN mkdir -p /app/data
+
+# Download the parquet file
+RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parquet -o /app/data/allrecipes.parquet
+
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
-RUN uv pip install --system --no-cache -r requirements.txt
+COPY ../shared/requirements.txt shared-requirements.txt
+RUN pip install --no-cache-dir -r shared-requirements.txt -r requirements.txt
 
-# Copy the rest of the application source code
+# Copy shared modules and application source code
+COPY ../shared/ /app/shared/
 COPY src/ /app
 
 # Expose the port the app runs on
 EXPOSE 8080
 
-# Make the init script executable and set it as the entrypoint
-RUN chmod +x /app/init.sh
-CMD ["/app/init.sh"]
+# Command to run the application - make init.sh executable first
+CMD ["sh", "-c", "chmod +x /app/init.sh && /app/init.sh"]

@@ -260,8 +260,8 @@ def run_performance_test(n_samples: int = 5000, save_results: bool = True) -> Di
             recipe_start = time.time()
             
             # Classify recipe (using mock function for testing)
-            result = mock_classify_recipe(recipe)
-            
+            from nb.src.diet_classifiers import classify_recipe_with_context # Assuming this function exists
+            result = classify_recipe_with_context(recipe)             
             recipe_end = time.time()
             recipe_time = recipe_end - recipe_start
             
@@ -446,6 +446,30 @@ def create_performance_visualizations(results: Dict[str, Any], metrics: Performa
     
     plt.tight_layout()
     
+    plt.figure(figsize=(10, 6))
+    
+    # Create a scatter plot of individual recipe times vs. throughput at that point in time
+    throughputs = [i / (metrics.recipe_times[i] + 1e-9) for i in range(1, len(metrics.recipe_times))]
+    latencies_ms = [t * 1000 for t in metrics.recipe_times[1:]]
+
+    sns.scatterplot(x=latencies_ms, y=throughputs, alpha=0.5)
+    plt.title('Performance Benchmark: Latency vs. Throughput', fontsize=18, weight='bold')
+    plt.xlabel('Latency per Recipe (ms)')
+    plt.ylabel('Instantaneous Throughput (recipes/sec)')
+    plt.xscale('log') # Latency often has a long tail, log scale helps visualization
+    
+    # Add average lines
+    avg_latency = results["performance_metrics"]["average_time_per_recipe_seconds"] * 1000
+    avg_throughput = results["performance_metrics"]["throughput_recipes_per_second"]
+    plt.axvline(avg_latency, color='r', linestyle='--', label=f'Avg Latency: {avg_latency:.2f} ms')
+    plt.axhline(avg_throughput, color='g', linestyle='--', label=f'Avg Throughput: {avg_throughput:.2f} rps')
+    plt.legend()
+    
+    viz_path = output_dir / "sota_performance_benchmark.png"
+    plt.savefig(viz_path, dpi=300, bbox_inches='tight')
+    logger.info(f"📊 Saved SOTA benchmark visualization to {viz_path}")
+    plt.show()
+
     # Save visualization
     viz_path = output_dir / "performance_test_visualization.png"
     plt.savefig(viz_path, dpi=300, bbox_inches='tight')

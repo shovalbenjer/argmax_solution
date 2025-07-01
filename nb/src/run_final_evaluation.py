@@ -12,6 +12,7 @@ from argparse import ArgumentParser
 import pandas as pd
 from loguru import logger
 import os
+import ast
 
 # Definitive path correction
 project_root = Path(__file__).resolve().parents[2]
@@ -72,10 +73,10 @@ def load_and_prepare_data(data_paths: List[Path]) -> pd.DataFrame:
     def safe_eval_ingredients(val):
         if isinstance(val, str) and val.startswith('['):
             try:
-                # The string looks like a list, so we can use eval
-                return eval(val)
-            except:
-                # If eval fails, return an empty list
+                # Use ast.literal_eval instead of eval for safety
+                return ast.literal_eval(val)
+            except (ValueError, SyntaxError):
+                # If literal_eval fails, return an empty list
                 return []
         # If it's already a list or something else, return as is or empty
         return val if isinstance(val, list) else []

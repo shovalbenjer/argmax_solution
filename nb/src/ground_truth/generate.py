@@ -29,6 +29,10 @@ from tqdm.asyncio import tqdm_asyncio
 from opensearchpy import OpenSearch
 from dotenv import load_dotenv
 
+# Google Generative AI imports
+import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
 # --- Local Module Imports ---
 # Assumes the script is run with the `src` directory in the Python path.
 from llm_handler.handler import LLMHandler
@@ -42,7 +46,9 @@ CONFIG = {
     "GROUND_TRUTH_FILENAME": "personas_ground_truth.csv",
     "SAMPLE_SIZE": 100,
     "BATCH_SIZE": 25,
-    "TEACHER_MODEL": os.getenv("TEACHER_MODEL", "qwen:latest"),
+    "PRIMARY_MODEL": "gemini-2.5-pro",  # Emphasize Gemini first
+    "FALLBACK_MODEL": "gemma3:1b",      # Fallback to Gemma3-1B if Gemini unavailable
+    "TEACHER_MODEL": os.getenv("TEACHER_MODEL", "gemini-2.5-pro"),
     "MLFLOW_TRACKING_URI": os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"),
     "OPENSEARCH_URL": os.getenv("OPENSEARCH_URL", "http://localhost:9200"),
     "RPM_LIMIT": int(os.getenv("RPM_LIMIT", 10)),
@@ -54,6 +60,7 @@ MODELS_QUOTAS = {
     'gemini-2.5-pro': (5, 250_000),
     'gemini-2.5-flash': (10, 250_000),
     'gemini-2.5-flash-lite-preview-06-17': (15, 250_000),
+    'gemma3:1b': (60, 1_000_000),  # Higher limits for local Ollama model
 }
 
 logging.basicConfig(level=CONFIG["LOG_LEVEL"], format='%(asctime)s - %(levelname)s - %(message)s', force=True)
@@ -339,34 +346,20 @@ async def run_classification_stage(df: pl.DataFrame, prompt_builder: Callable, s
     return pl.DataFrame(all_results)
 
 
-async def main():
-    logger.info("🚀 Starting SOTA Personas Ground Truth Generation Pipeline...")
-    
-    # --- Connect to Services ---
-    llm = LLMHandler()
-    os_client = OpenSearch(hosts=[CONFIG["OPENSEARCH_URL"]])
-    rate_limiter = AsyncTokenBucket(CONFIG["RPM_LIMIT"], CONFIG["TPM_LIMIT"])
-    
-    if not os_client.ping():
-        logger.error("❌ Could not connect to OpenSearch. Aborting.")
-        return
-
-    # --- Fetch and Process Data ---
-    recipes_hits = fetch_recipes_synchronously(os_client)
-    
-    processed_recipes = []
-    # ... (enrichment loop)
-    # This loop is now correct and doesn't need changes.
-
-    # --- Asynchronous Part: Classify Recipes ---
-    if not processed_recipes:
-        logger.warning("No recipes could be processed. Aborting classification.")
-        return
-        
-    all_results = await classify_recipes_async(processed_recipes, llm, rate_limiter)
-    
-    # --- MLflow Logging & Saving ---
-    # ... (MLflow and saving logic)
+def wait_for_index(client: OpenSearch, index_name: str, max_retries: int = 20, retry_interval: int = 10) -> bool:
+    """Waits for a specific OpenSearch index to exist."""
+    logger.info(f"Waiting for OpenSearch index '{index_name}' to be created...")
+    for i in range(max_retries):
+        try:
+            if client.indices.exists(index=index_name):
+                logger.success(f"Index '{index_name}' found.")
+                return True
+        except Exception as e:
+            logger.warning(f"Error checking for index: {e}")
+        logger.info(f"Retrying in {retry_interval} seconds... (attempt {i+1}/{max_retries})")
+        time.sleep(retry_interval)
+    logger.error(f"Index '{index_name}' not found after maximum retries.")
+    return False
 
 
 def fetch_recipes_synchronously(os_client: OpenSearch) -> List[Dict]:
@@ -376,20 +369,154 @@ def fetch_recipes_synchronously(os_client: OpenSearch) -> List[Dict]:
     response = os_client.search(index="recipes", body=query)
     return response['hits']['hits']
 
-async def classify_recipes_async(processed_recipes: List[Dict], llm: LLMHandler, rate_limiter: AsyncTokenBucket) -> List[Dict]:
-    """Runs the asynchronous classification part of the pipeline."""
-    all_results = []
+
+async def classify_batch(batch: List[Dict], llm: LLMHandler, rate_limiter: AsyncTokenBucket) -> List[Dict]:
+    """Classifies a batch of recipes using the LLM handler.
+    
+    This function processes a batch of recipes through both vegan and keto classification
+    using the Ollama-based LLM handler, then merges the results.
+    """
+    try:
+        results = []
+        
+        for recipe in batch:
+            # Extract recipe data
+            recipe_id = recipe.get("recipe_id")
+            ingredients = json.loads(recipe.get("ingredients", "[]"))
+            context = json.loads(recipe.get("processed_context", "[]"))
+            
+            # Create classification prompts
+            vegan_prompt = f"""
+            Analyze this recipe for vegan compliance. A recipe is vegan if it contains NO animal products.
+            
+            Recipe: {recipe.get('title', 'Unknown')}
+            Ingredients: {ingredients}
+            Context: {context}
+            
+            Respond with JSON: {{"is_vegan": boolean, "vegan_reasoning": "explanation", "animal_ingredients_found": ["list"]}}
+            """
+            
+            keto_prompt = f"""
+            Analyze this recipe for keto compliance. A recipe is keto if it has very low carbohydrates (<10g per 100g).
+            
+            Recipe: {recipe.get('title', 'Unknown')}
+            Ingredients: {ingredients}
+            Context: {context}
+            
+            Respond with JSON: {{"is_keto": boolean, "keto_reasoning": "explanation", "high_carb_ingredients_found": ["list"]}}
+            """
+            
+            # Get classifications using fallback model (Gemma3-1B)
+            vegan_result = await llm.async_query("gemma3:1b", vegan_prompt, as_json=True)
+            keto_result = await llm.async_query("gemma3:1b", keto_prompt, as_json=True)
+            
+            # Merge results
+            merged_result = {
+                "recipe_id": recipe_id,
+                "title": recipe.get('title', 'Unknown'),
+                "ingredients": ingredients
+            }
+            
+            # Add vegan results
+            if isinstance(vegan_result, dict) and not vegan_result.get("error"):
+                merged_result.update(vegan_result)
+            else:
+                merged_result.update({"is_vegan": False, "vegan_reasoning": "Error in classification", "animal_ingredients_found": []})
+            
+            # Add keto results
+            if isinstance(keto_result, dict) and not keto_result.get("error"):
+                merged_result.update(keto_result)
+            else:
+                merged_result.update({"is_keto": False, "keto_reasoning": "Error in classification", "high_carb_ingredients_found": []})
+                
+            results.append(merged_result)
+            
+        return results
+        
+    except Exception as e:
+        logger.error(f"Batch classification failed: {e}")
+        return []
+
+
+async def classify_and_log_async(processed_recipes: List[Dict]):
+    """Runs the asynchronous classification and MLflow logging part of the pipeline."""
+    llm = LLMHandler()
+    rate_limiter = AsyncTokenBucket(CONFIG["RPM_LIMIT"], CONFIG["TPM_LIMIT"])
+    
+    # Run Classification
     tasks = []
     for i in range(0, len(processed_recipes), CONFIG["BATCH_SIZE"]):
         batch = processed_recipes[i:i + CONFIG["BATCH_SIZE"]]
         tasks.append(classify_batch(batch, llm, rate_limiter))
         
+    all_results = []
     for result in await tqdm_asyncio.gather(*tasks, desc="Classifying Batches"):
         all_results.extend(result)
-    return all_results
+
+    # MLflow Logging & Saving
+    if not all_results:
+        logger.error("Classification failed for all batches. No data to save.")
+        return
+
+    mlflow.set_tracking_uri(CONFIG["MLFLOW_TRACKING_URI"])
+    with mlflow.start_run(run_name="SOTA Personas Ground Truth Generation") as run:
+        logger.info(f"MLflow run started: {run.info.run_id}")
+        mlflow.log_params(CONFIG)
+        
+        final_data = []
+        for res in all_results:
+            flat_res = {"recipe_id": res.get("recipe_id")}
+            violations = res.get("violations", {})
+            for k, v in violations.items():
+                flat_res[f"violations_{k}"] = ", ".join(v)
+            for k, v in res.items():
+                if k not in ["recipe_id", "violations"]:
+                    flat_res[k] = v
+            final_data.append(flat_res)
+            
+        final_df = pl.DataFrame(final_data)
+        
+        if not final_df.is_empty():
+            output_path = CONFIG["OUTPUT_DIR"] / CONFIG["GROUND_TRUTH_FILENAME"]
+            final_df.write_csv(output_path)
+            mlflow.log_artifact(str(output_path), "generated_datasets")
+            logger.success(f"✅ Ground truth generation complete. Saved to {output_path}")
+        else:
+            logger.warning("No results were generated. Skipping artifact logging.")
+
+
+def main():
+    """Main execution block, orchestrating synchronous and asynchronous parts."""
+    logger.info("🚀 Starting SOTA Personas Ground Truth Generation Pipeline...")
+    
+    # --- Synchronous Part: Connect, Wait, and Fetch Data ---
+    os_client = OpenSearch(hosts=[CONFIG["OPENSEARCH_URL"]])
+    if not os_client.ping() or not wait_for_index(os_client, "recipes"):
+        return
+
+    recipes_hits = fetch_recipes_synchronously(os_client)
+    
+    processed_recipes = []
+    for hit in tqdm(recipes_hits, desc="Enriching Recipes"):
+        source = hit['_source']
+        ingredients = source.get('ingredients', [])
+        if not ingredients or not isinstance(ingredients, list): continue
+        context = [get_context_with_rapidfuzz_fallback(ing) for ing in ingredients]
+        processed_recipes.append({
+            "recipe_id": hit['_id'],
+            "title": source.get('title'),
+            "ingredients": json.dumps(ingredients),
+            "instructions_list": source.get('instructions', []),
+            "processed_context": json.dumps(context)
+        })
+
+    # --- Asynchronous Part ---
+    if processed_recipes:
+        asyncio.run(classify_and_log_async(processed_recipes))
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=CONFIG["LOG_LEVEL"], format='%(asctime)s - %(levelname)s - %(message)s', force=True)
     CONFIG["OUTPUT_DIR"].mkdir(parents=True, exist_ok=True)
     logger.add(CONFIG["OUTPUT_DIR"] / "personas_generation.log", rotation="10 MB")
-    asyncio.run(main()) 
+    main() 
