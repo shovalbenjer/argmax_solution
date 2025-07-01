@@ -32,9 +32,26 @@ SAMPLE_SIZE = 500 # Use a smaller sample for faster execution
 
 # --- Mock Teacher LLM ---
 def get_teacher_classification(contexts: List[Dict]) -> Dict:
-    """
-    Mocks a call to a powerful 'teacher' LLM like Gemini.
-    Generates a classification persona based on the processed contexts.
+    """Mocks a 'teacher' LLM call to generate a classification persona.
+
+    Detailed Description:
+        - This function simulates a call to a powerful 'teacher' language model (like Gemini 1.5 Pro)
+          to generate a ground truth classification for a recipe.
+        - It uses a simplified heuristic: it calculates the total carbohydrates from the provided contexts
+          and checks for any non-vegan ingredients to assign a dietary persona (e.g., 'strict_keto', 'not_vegan').
+        - This mock is used for generating a sample ground truth dataset without incurring API costs.
+
+    Parameters:
+        - contexts (List[Dict]): A list of dictionaries, where each dictionary contains the
+          processed context for a single ingredient (e.g., nutritional information).
+
+    Returns:
+        - Dict: A dictionary containing the classification persona, the reasoning behind it,
+          and boolean flags for 'keto' and 'vegan'.
+
+    Examples:
+        >>> get_teacher_classification([{'normalized_nutrients': {'total_carbs_g': 5}}, {'normalized_nutrients': {'total_carbs_g': 2}}])
+        {'classification': 'strict_keto', 'reasoning': 'Mocked classification based on total carbs (7.0g) and vegan checks.', 'keto': True, 'vegan': False}
     """
     total_carbs = sum(c.get('normalized_nutrients', {}).get('total_carbs_g', 100) or 100 for c in contexts)
     is_clearly_not_vegan = any("non_vegan" in c.get('retrieved_data', {}).get('name', '') for c in contexts)
@@ -59,7 +76,28 @@ def get_teacher_classification(contexts: List[Dict]) -> Dict:
 
 # --- Main Execution ---
 def main():
-    """Orchestrates the ground truth generation process."""
+    """Orchestrates the ground truth generation process using a mocked teacher LLM.
+
+    Detailed Description:
+        - This function manages the end-to-end process of creating a ground truth dataset.
+        - It loads a sample of recipes from a raw CSV file.
+        - It initializes an MLflow experiment to track the generation process, logging parameters
+          like the model name and sample size.
+        - It iterates through each recipe, processes its ingredients to get their nutritional contexts,
+          and uses the mocked `get_teacher_classification` function to generate a classification.
+        - Finally, it saves the results to a CSV file and logs the output file and performance
+          metrics as artifacts in MLflow.
+
+    Libraries Used:
+        - pandas: For reading the raw recipe data and creating the final results DataFrame. Its performance
+          and ease of use with tabular data make it a better choice than standard Python lists of dictionaries.
+        - mlflow: To log the experiment, including parameters, metrics, and the output artifact. This ensures
+          reproducibility and provides a clear record of the generation process.
+        - loguru: For structured and colorful logging, which improves the readability of the console output
+          compared to the standard `logging` module.
+        - pathlib: For robust and cross-platform path management, which is safer and more readable than
+          using string concatenation for file paths.
+    """
     logger.info(f"===== Starting Ground Truth Generation (Sample Size: {SAMPLE_SIZE}) =====")
     
     if not RAW_DATA_PATH.exists():

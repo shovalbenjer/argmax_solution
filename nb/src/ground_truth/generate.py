@@ -31,6 +31,24 @@ CONFIG = {
 
 # --- Rate Limiter ---
 class AsyncTokenBucket:
+    """Manages API rate limiting for asynchronous requests using a token bucket algorithm.
+
+    Detailed Description:
+        - This class ensures that requests to an API do not exceed specified rate limits
+          (requests per minute and tokens per minute).
+        - It uses an asyncio.Lock to handle concurrent access safely.
+        - When a request is made (`acquire`), it checks if the limits have been reached. If so,
+          it calculates the required delay and sleeps asynchronously before proceeding.
+
+    Parameters:
+        - rpm_rate (int): The maximum number of requests allowed per minute.
+        - tpm_rate (int): The maximum number of tokens allowed per minute.
+
+    Libraries Used:
+        - asyncio: Used for asynchronous locking and sleeping, essential for non-blocking
+          rate limiting in an async environment.
+        - time: Used to track the passage of time for resetting the rate limit counters.
+    """
     def __init__(self, rpm_rate: int, tpm_rate: int):
         self.rpm_rate = rpm_rate
         self.tpm_rate = tpm_rate
@@ -69,7 +87,24 @@ class AsyncTokenBucket:
 
 # --- Prompt Builders ---
 def build_vegan_prompt(recipe_batch: List[Dict[str, Any]]) -> str:
-    """Builds the specialized prompt for vegan classification."""
+    """Builds a detailed, zero-shot prompt for the LLM to classify recipes as vegan.
+
+    Detailed Description:
+        - This function constructs a prompt that instructs a large language model to act
+          as a food scientist.
+        - It provides a clear definition of "strictly vegan" and a structured process for the
+          model to follow.
+        - It dynamically inserts a batch of recipe data (ID, title, ingredients) as a JSON
+          block within the prompt.
+        - The prompt engineering here is crucial for getting reliable, structured JSON output
+          from the model.
+
+    Parameters:
+        - recipe_batch (List[Dict[str, Any]]): A list of recipe dictionaries to include in the prompt.
+
+    Returns:
+        - str: The fully formatted prompt string ready to be sent to the LLM.
+    """
     recipe_data_list = [{
         "recipe_id": r.get('recipe_id'), 
         "title": r.get('title'), 
@@ -99,7 +134,23 @@ def build_vegan_prompt(recipe_batch: List[Dict[str, Any]]) -> str:
     return prompt
 
 def build_keto_prompt(recipe_batch: List[Dict[str, Any]]) -> str:
-    """Builds the specialized prompt for keto classification using our processed context."""
+    """Builds a prompt for keto classification, enriched with pre-processed context.
+
+    Detailed Description:
+        - This function constructs a prompt for keto classification that leverages a hybrid approach.
+        - It provides the LLM with the `processed_context` for each ingredient, which includes
+          deterministically calculated nutritional information.
+        - This guides the LLM to make a more informed decision, but also asks it to use its
+          own expert knowledge to override or flag ingredients that are known to be high-carb,
+          acting as a safety net.
+
+    Parameters:
+        - recipe_batch (List[Dict[str, Any]]): A list of recipe dictionaries, each containing
+          the `processed_context`.
+
+    Returns:
+        - str: The fully formatted, context-enriched prompt string.
+    """
     recipe_data_list = [{
         "recipe_id": r.get('recipe_id'), 
         "title": r.get('title'), 
@@ -138,6 +189,24 @@ async def classify_batch(
     rate_limiter: AsyncTokenBucket,
     prompt_builder: Callable[[List[Dict[str, Any]]], str]
 ) -> List[Dict[str, Any]]:
+    """Sends a batch of recipes to the LLM for classification.
+
+    Detailed Description:
+        - This asynchronous function is the core of the LLM interaction.
+        - It first acquires a permit from the `AsyncTokenBucket` to ensure it adheres to rate limits.
+        - It then uses the provided `prompt_builder` to construct the appropriate prompt for the batch.
+        - It calls the `LLMHandler`'s `async_query` method to send the request to the teacher model.
+        - It expects a JSON response and performs basic validation to check for errors.
+
+    Parameters:
+        - batch (List[Dict[str, Any]]): The list of recipe dictionaries to classify.
+        - llm (LLMHandler): The instance of the LLM handler for making queries.
+        - rate_limiter (AsyncTokenBucket): The rate limiter instance.
+        - prompt_builder (Callable): The function to use for building the prompt (e.g., `build_vegan_prompt`).
+
+    Returns:
+        - List[Dict[str, Any]]: A list of classification results from the LLM, or an empty list if the batch fails.
+    """
     if not batch: return []
     # Simplified token estimation
     prompt = prompt_builder(batch)
@@ -152,6 +221,24 @@ async def classify_batch(
 
 
 async def process_recipes_in_stages(df: pl.DataFrame, llm: LLMHandler, rate_limiter: AsyncTokenBucket) -> pl.DataFrame:
+    """Orchestrates the classification of recipes in sequential stages.
+
+    Detailed Description:
+        - This function manages the overall classification workflow, which is broken into distinct stages
+          (first vegan, then keto). This "decomposed" approach allows for specialized prompts for each task.
+        - For each stage, it creates a list of asynchronous tasks, where each task corresponds to a
+          batch of recipes to be classified.
+        - It uses `tqdm_asyncio.gather` to run all batch tasks for a stage concurrently, with a progress bar.
+        - After both stages are complete, it joins the results back to the original DataFrame.
+
+    Parameters:
+        - df (pl.DataFrame): The input DataFrame of processed recipes.
+        - llm (LLMHandler): The LLM handler instance.
+        - rate_limiter (AsyncTokenBucket): The rate limiter instance.
+
+    Returns:
+        - pl.DataFrame: The final DataFrame with both vegan and keto classification results merged in.
+    """
     # Stage 1: Vegan Classification
     logger.info("--- Stage 1: Vegan Classification ---")
     vegan_tasks = []
@@ -182,6 +269,27 @@ async def process_recipes_in_stages(df: pl.DataFrame, llm: LLMHandler, rate_limi
 
 
 async def main():
+    """Main asynchronous entry point for the SOTA ground truth generation pipeline.
+
+    Detailed Description:
+        - This function orchestrates the entire end-to-end process.
+        - **Initialization:** It connects to external services: the LLM (via `LLMHandler`), OpenSearch
+          (for data retrieval), and sets up the `AsyncTokenBucket` for rate limiting.
+        - **Data Fetching:** It queries OpenSearch for a random sample of recipes.
+        - **Data Processing:** It enriches each recipe with deterministic context using `get_ingredient_context`.
+          This pre-processing is key to the hybrid AI approach.
+        - **MLflow Experiment:** It sets up and starts an MLflow run to log all parameters, and eventually,
+          the output artifact. This is crucial for reproducibility.
+        - **Execution:** It calls `process_recipes_in_stages` to run the core classification logic.
+        - **Output:** It saves the final, enriched DataFrame to a CSV and logs it as an artifact in MLflow.
+
+    Libraries Used:
+        - asyncio: To run the entire asynchronous pipeline.
+        - mlflow: For experiment tracking and reproducibility.
+        - opensearchpy: The asynchronous client for interacting with OpenSearch.
+        - polars: For efficient data manipulation.
+        - tqdm: To provide progress bars for asynchronous tasks.
+    """
     logger.info("🚀 Starting SOTA Ground Truth Generation Pipeline...")
     
     # --- Connect to Services ---

@@ -10,6 +10,22 @@ import pandas as pd
 from loguru import logger
 
 class DataManager:
+    """A singleton data manager for loading and caching nutritional and dietary data.
+
+    Detailed Description:
+        - This class implements the singleton pattern to ensure that expensive data loading
+          operations are performed only once during the application lifecycle.
+        - It loads nutrition facts and vegan ontology data from CSV files into optimized
+          in-memory data structures (pandas DataFrame and Python set) for fast lookups.
+        - The singleton pattern is crucial here because data loading can take several seconds
+          and should not be repeated for each classifier call.
+
+    Libraries Used:
+        - pandas: For loading and processing the nutrition CSV data. Its vectorized operations
+          and indexing capabilities make it superior to native Python for tabular data manipulation.
+        - pathlib: For robust, cross-platform file path handling.
+        - loguru: For structured logging with better formatting than the standard logging module.
+    """
     _instance = None
 
     def __new__(cls):
@@ -19,7 +35,13 @@ class DataManager:
         return cls._instance
 
     def _initialize(self):
-        """Loads all required datasets into memory."""
+        """Initializes the data manager by loading all required datasets.
+
+        Detailed Description:
+            - This method is called once when the singleton instance is first created.
+            - It sets up the file paths and calls the individual data loading methods.
+            - The initialization is separated from `__new__` to keep the singleton logic clean.
+        """
         self.base_dir = Path(__file__).resolve().parent
         self.raw_data_dir = self.base_dir / "raw_data"
         
@@ -27,7 +49,22 @@ class DataManager:
         self.vegan_ontology_set = self._load_vegan_ontology()
         
     def _load_nutrition_data(self) -> pd.DataFrame:
-        """Loads and processes the nutrition data."""
+        """Loads and preprocesses nutrition data for fast ingredient lookups.
+
+        Detailed Description:
+            - This method loads the raw nutrition CSV file, which contains no headers.
+            - It selects only the required columns (ingredient name and carbohydrates).
+            - It normalizes ingredient names to lowercase and strips whitespace for consistent matching.
+            - It sets the normalized name as the DataFrame index for O(1) lookup performance.
+            - It handles missing carbohydrate values by filling them with a conservative default (100g).
+
+        Returns:
+            - pd.DataFrame: A DataFrame indexed by normalized ingredient names, containing
+              carbohydrate information, or an empty DataFrame if loading fails.
+
+        Libraries Used:
+            - pandas: For CSV loading, data cleaning, and indexing operations.
+        """
         path = self.raw_data_dir / "nutrition.csv"
         logger.info(f"Loading nutrition data from {path}...")
         try:
@@ -54,7 +91,21 @@ class DataManager:
             return pd.DataFrame() # Return empty dataframe on failure
 
     def _load_vegan_ontology(self) -> set:
-        """Loads the vegan ontology into a set for fast lookups."""
+        """Loads the vegan ontology into a set for O(1) ingredient classification.
+
+        Detailed Description:
+            - This method loads the vegan ontology CSV file containing ingredient classifications.
+            - It filters for ingredients that are explicitly marked as non-vegan (is_vegan == False).
+            - It normalizes the terms to lowercase for consistent matching.
+            - It returns a Python set for O(1) membership testing during classification.
+
+        Returns:
+            - set: A set of normalized non-vegan ingredient terms, or an empty set if loading fails.
+
+        Libraries Used:
+            - pandas: For CSV loading and filtering operations.
+            - Python set: For O(1) membership testing, which is more efficient than list lookup.
+        """
         path = self.raw_data_dir / "vegan_ontology.csv"
         logger.info(f"Loading vegan ontology from {path}...")
         try:

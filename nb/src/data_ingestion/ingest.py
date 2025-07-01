@@ -43,7 +43,21 @@ unit_conversions_table = Table('unit_conversions', metadata,
 )
 
 def create_database_schema():
-    """Creates the necessary tables in the SQLite database."""
+    """Creates the database schema using SQLAlchemy.
+
+    Detailed Description:
+        - This function defines and creates the tables for the knowledge graph database.
+        - It uses SQLAlchemy's metadata capabilities to define the table structures programmatically.
+        - The function first drops all existing tables to ensure a clean setup (`metadata.drop_all`),
+          then creates the new tables (`metadata.create_all`).
+        - Finally, it creates indexes on the name/term columns of the tables to speed up
+          future search operations.
+
+    Libraries Used:
+        - SQLAlchemy: A powerful SQL toolkit and Object-Relational Mapper (ORM). Here, it's used
+          for schema definition and creation in a database-agnostic way.
+        - loguru: For logging the progress of the schema creation.
+    """
     logger.info("Creating database schema...")
     metadata.drop_all(engine)
     metadata.create_all(engine)
@@ -54,7 +68,22 @@ def create_database_schema():
     logger.success("Database schema created successfully.")
 
 def ingest_nutrition_data():
-    """Ingests nutrition data from CSV into the database."""
+    """Ingests and cleans nutrition data from a CSV file into the database.
+
+    Detailed Description:
+        - This function reads the raw nutrition CSV file using Polars.
+        - It performs several cleaning and transformation steps:
+            1. Selects specific columns from the raw CSV by their position.
+            2. Renames columns to match the database schema.
+            3. Cleans the 'name' column by converting it to lowercase and stripping whitespace.
+            4. Cleans numeric columns by removing non-numeric characters (like 'g') and casting them to float.
+            5. Fills any resulting null values with 0.
+        - The cleaned data is then inserted into the `nutrition_facts` table.
+
+    Libraries Used:
+        - polars: For fast and memory-efficient reading and manipulation of the CSV data.
+        - SQLAlchemy: To connect to the database and execute the insert operation.
+    """
     logger.info("Ingesting nutrition data...")
     try:
         df = pl.read_csv(NUTRITION_CSV, has_header=False)
@@ -85,7 +114,19 @@ def ingest_nutrition_data():
         logger.error(f"Failed to ingest nutrition data: {e}")
 
 def ingest_vegan_ontology():
-    """Ingests vegan ontology data from CSV into the database."""
+    """Ingests vegan ontology terms from a CSV file into the database.
+
+    Detailed Description:
+        - This function reads the vegan ontology CSV, which contains a list of terms and
+          whether they are considered vegan.
+        - It performs a simple cleaning step on the 'term' column to standardize it
+          (lowercase and stripped whitespace).
+        - The cleaned data is then inserted into the `vegan_ontology` table.
+
+    Libraries Used:
+        - polars: For reading the CSV data.
+        - SQLAlchemy: For inserting the data into the database.
+    """
     logger.info("Ingesting vegan ontology data...")
     try:
         df = pl.read_csv(VEGAN_CSV).with_columns(
@@ -100,7 +141,21 @@ def ingest_vegan_ontology():
         logger.error(f"Failed to ingest vegan ontology data: {e}")
 
 def ingest_unit_conversions():
-    """Ingests and transforms unit conversion data from CSV into the database."""
+    """Ingests and transforms unit conversion data from a CSV into the database.
+
+    Detailed Description:
+        - This function handles the ingestion of unit conversion data, which requires
+          significant transformation to fit the target schema.
+        - The source CSV format is not ideal, so this function makes some assumptions:
+            - The 'Unit' column is used as a stand-in for the ingredient name.
+            - It assumes all conversions are to a base unit of 'g' (grams).
+        - It renames columns, creates new ones with literal values, and standardizes the
+          ingredient name before inserting the data into the `unit_conversions` table.
+
+    Libraries Used:
+        - polars: For data reading and transformation.
+        - SQLAlchemy: For database insertion.
+    """
     logger.info("Ingesting unit conversion data...")
     try:
         df = pl.read_csv(UNIT_CONVERSION_CSV)
@@ -127,7 +182,19 @@ def ingest_unit_conversions():
         logger.error(f"Failed to ingest unit conversion data: {e}")
 
 def main():
-    """Main function to run the entire data ingestion pipeline."""
+    """Main function to orchestrate the entire data ingestion pipeline.
+
+    Detailed Description:
+        - This function serves as the entry point for the data ingestion script.
+        - It ensures the output directory for the database exists.
+        - It deletes any pre-existing database file to ensure a fresh start.
+        - It then calls the other functions in sequence to:
+            1. Create the database schema.
+            2. Ingest nutrition data.
+            3. Ingest the vegan ontology.
+            4. Ingest unit conversions.
+        - This ensures a reproducible and ordered data ingestion process.
+    """
     logger.info("Starting data ingestion pipeline...")
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     if DB_PATH.exists():

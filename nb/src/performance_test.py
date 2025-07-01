@@ -27,6 +27,20 @@ import polars as pl
 
 # Performance metrics
 class PerformanceMetrics:
+    """A container for collecting and calculating performance metrics during a test run.
+
+    Detailed Description:
+        - This class provides a structured way to manage metrics for a performance test.
+        - It includes methods to handle timing (start, end, and individual recipe times),
+          and to collect predictions and errors.
+        - It also contains methods to calculate summary statistics like total time,
+          average time, and throughput.
+
+    Libraries Used:
+        - numpy: Used for calculating the mean of recipe processing times. It's a standard and
+          efficient library for numerical operations in Python.
+        - time: Used for basic timing operations.
+    """
     def __init__(self):
         self.start_time = None
         self.end_time = None
@@ -61,14 +75,27 @@ class PerformanceMetrics:
         return len(self.recipe_times) / total_time if total_time > 0 else 0
 
 def load_random_recipes(n_samples: int = 5000) -> List[Dict[str, Any]]:
-    """
-    Load random recipes from available data sources.
-    
-    Args:
-        n_samples: Number of random samples to load
-        
+    """Loads a specified number of random recipes for testing.
+
+    Detailed Description:
+        - This function is responsible for sourcing the data for the performance test.
+        - It first attempts to load recipes from a primary ground truth CSV file.
+        - If the number of loaded recipes is less than `n_samples`, it proceeds to generate
+          synthetic recipes using a base list of ingredients from a nutrition CSV file.
+        - This hybrid approach ensures that the test can run even if the primary data source is small.
+
+    Parameters:
+        - n_samples (int): The target number of random recipes to load.
+
     Returns:
-        List of recipe dictionaries
+        - List[Dict[str, Any]]: A list of dictionaries, where each dictionary represents a recipe.
+
+    Libraries Used:
+        - polars: A fast DataFrame library used for reading the CSV files. It is chosen over
+          pandas here for its potential performance advantages in I/O operations.
+        - pandas: Used to convert a polars DataFrame to a list of names for synthetic data generation.
+        - random: For selecting random samples and templates for synthetic data.
+        - loguru: For logging the progress of data loading.
     """
     logger.info(f"Loading {n_samples} random recipes from available sources...")
     
@@ -139,15 +166,22 @@ def load_random_recipes(n_samples: int = 5000) -> List[Dict[str, Any]]:
     return all_recipes
 
 def mock_classify_recipe(recipe: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Mock classification function for performance testing.
-    Simulates the actual classify_recipe function with realistic processing time.
-    
-    Args:
-        recipe: Recipe dictionary with title, ingredients, etc.
-        
+    """Simulates the recipe classification function for performance testing.
+
+    Detailed Description:
+        - This function acts as a stand-in for the actual, potentially slow, `classify_recipe` function.
+        - It introduces a small, random delay to mimic the processing time (latency) of a real model inference.
+        - It uses a simple, rule-based heuristic based on keywords in the recipe's title and ingredients
+          to generate a plausible-looking classification (vegan/keto).
+        - This allows for testing the throughput and performance of the overall system without the
+          computational expense or variability of a real ML model.
+
+    Parameters:
+        - recipe (Dict[str, Any]): A dictionary representing the recipe to be classified.
+
     Returns:
-        Classification result dictionary
+        - Dict[str, Any]: A dictionary containing the mock classification results, including confidence scores
+          and the simulated processing time.
     """
     # Simulate processing time (actual classifier would take time for inference)
     time.sleep(random.uniform(0.001, 0.005))  # 1-5ms per recipe
@@ -187,15 +221,23 @@ def mock_classify_recipe(recipe: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 def run_performance_test(n_samples: int = 5000, save_results: bool = True) -> Dict[str, Any]:
-    """
-    Run comprehensive performance test on random recipe samples.
-    
-    Args:
-        n_samples: Number of recipes to test
-        save_results: Whether to save results to files
-        
+    """Runs the core performance test on a sample of recipes.
+
+    Detailed Description:
+        - This function orchestrates the main performance test loop.
+        - It initializes the `PerformanceMetrics` container.
+        - It loads the recipe data using `load_random_recipes`.
+        - It then iterates through each recipe, calling `mock_classify_recipe` to get a simulated
+          classification and timing each call.
+        - After the loop, it calculates and aggregates all performance statistics and prediction distributions.
+
+    Parameters:
+        - n_samples (int): The number of recipes to test.
+        - save_results (bool): If True, the results will be saved to files.
+
     Returns:
-        Performance results dictionary
+        - Dict[str, Any]: A comprehensive dictionary containing all performance metrics,
+          test parameters, and prediction distributions.
     """
     logger.info(f"🚀 Starting Performance Test on {n_samples} Random Samples")
     
@@ -298,7 +340,18 @@ def run_performance_test(n_samples: int = 5000, save_results: bool = True) -> Di
     return results
 
 def save_performance_results(results: Dict[str, Any], metrics: PerformanceMetrics):
-    """Save performance test results and generate visualizations."""
+    """Saves performance test results to a JSON file and triggers visualization.
+
+    Detailed Description:
+        - This function handles the output of the performance test.
+        - It creates the output directory if it doesn't exist.
+        - It saves the detailed results dictionary to a `performance_test_results.json` file.
+        - It then calls the functions to generate the visual charts and the text summary report.
+
+    Parameters:
+        - results (Dict[str, Any]): The dictionary of results from `run_performance_test`.
+        - metrics (PerformanceMetrics): The metrics object containing raw timing data needed for visualizations.
+    """
     
     output_dir = Path("nb/src/data/performance_results")
     output_dir.mkdir(exist_ok=True, parents=True)
@@ -313,7 +366,26 @@ def save_performance_results(results: Dict[str, Any], metrics: PerformanceMetric
     create_performance_visualizations(results, metrics, output_dir)
 
 def create_performance_visualizations(results: Dict[str, Any], metrics: PerformanceMetrics, output_dir: Path):
-    """Create performance visualization charts."""
+    """Generates and saves a set of plots summarizing the performance results.
+
+    Detailed Description:
+        - This function creates a 2x2 subplot figure to visualize the performance test results.
+        - The visualizations include:
+            1. A histogram of recipe processing times.
+            2. A pie chart showing the distribution of dietary classifications.
+            3. A bar chart of key performance metrics (throughput, latency).
+            4. A line plot of cumulative processing time.
+        - This provides a quick, visual summary of the system's performance.
+
+    Parameters:
+        - results (Dict[str, Any]): The main results dictionary.
+        - metrics (PerformanceMetrics): The metrics object containing the raw timing data.
+        - output_dir (Path): The directory where the output PNG file will be saved.
+
+    Libraries Used:
+        - matplotlib & seaborn: These are standard libraries for data visualization in Python,
+          used here to create clear and informative plots.
+    """
     
     # Set style
     plt.style.use('default')
@@ -384,7 +456,18 @@ def create_performance_visualizations(results: Dict[str, Any], metrics: Performa
     create_summary_report(results, output_dir)
 
 def create_summary_report(results: Dict[str, Any], output_dir: Path):
-    """Create a text summary report."""
+    """Creates a human-readable text file summarizing the test results.
+
+    Detailed Description:
+        - This function generates a `.txt` file that provides a clean, text-based summary
+          of the most important findings from the performance test.
+        - It includes sections for overall performance metrics, prediction distribution,
+          and timing statistics, making the results easy to read and share.
+
+    Parameters:
+        - results (Dict[str, Any]): The dictionary of test results.
+        - output_dir (Path): The directory where the report file will be saved.
+    """
     
     report_path = output_dir / "performance_test_report.txt"
     
@@ -424,14 +507,22 @@ def create_summary_report(results: Dict[str, Any], output_dir: Path):
 
 # Main execution function for easy calling
 def run_performance_test_suite(n_samples: int = 5000) -> Dict[str, Any]:
-    """
-    Main function to run the complete performance test suite.
-    
-    Args:
-        n_samples: Number of random samples to test (default: 5000)
-        
+    """The main entry-point function to run the complete performance test suite.
+
+    Detailed Description:
+        - This function serves as the primary wrapper for executing the performance test.
+        - It calls `run_performance_test` and includes top-level error handling (a try...except block)
+          to catch any exceptions that might occur during the test run, ensuring that the script
+          exits gracefully.
+
+    Parameters:
+        - n_samples (int): The number of random samples to test.
+
     Returns:
-        Complete performance test results
+        - Dict[str, Any]: The complete performance test results.
+
+    Raises:
+        - Exception: Catches and re-raises any exception that occurs during the test.
     """
     logger.info("🎯 Starting Recipe Classification Performance Test Suite")
     

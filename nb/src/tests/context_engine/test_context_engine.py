@@ -17,15 +17,20 @@ from src.context_engine.models import RSLSQLResponse, NormalizedContext
 
 @pytest.fixture
 def mock_db_connection():
-    """Creates a mock, in-memory DuckDB database for testing.
+    """Creates an in-memory DuckDB database fixture for isolated testing.
 
-    This pytest fixture sets up an in-memory database and populates it with
-    sample data for `nutrition_facts` and `unit_conversions`. This allows
-    tests to run against a predictable database state without needing the
-    actual SQLite file.
+    Detailed Description:
+        - This pytest fixture sets up a clean, in-memory database for each test.
+        - It creates the required table schema and populates it with known test data.
+        - This approach ensures tests are deterministic and don't depend on external
+          database state or files.
 
     Returns:
-        A connection object to the in-memory DuckDB instance.
+        - duckdb.Connection: A connection to the in-memory test database.
+
+    Libraries Used:
+        - duckdb: An in-memory analytical database that's faster than SQLite for test scenarios.
+          It provides SQL compatibility while avoiding file I/O overhead.
     """
     """Create a mock in-memory DB and populate it with test data."""
     conn = duckdb.connect(':memory:')
@@ -56,17 +61,24 @@ def mock_db_connection():
     return conn
 
 def test_single_ingredient_processing(monkeypatch, mock_db_connection):
-    """Tests the end-to-end orchestration for a single ingredient.
+    """Tests the complete ingredient processing pipeline with mocked dependencies.
 
-    This test validates the `get_context_for_raw_ingredient` function.
-    It uses `monkeypatch` to:
-    1.  Replace the (mocked) RSL-SQL handler with a MagicMock that returns a
-        predictable SQL query.
-    2.  Replace the database connection function with one that returns the
-        in-memory `mock_db_connection`.
-    
-    This effectively tests the orchestration logic while isolating it from the
-    actual text-to-SQL model and the real database.
+    Detailed Description:
+        - This integration test validates the `get_context_for_raw_ingredient` function.
+        - It uses pytest's `monkeypatch` to replace external dependencies:
+          1. The RSL-SQL handler is mocked to return predictable SQL queries.
+          2. The database connection is replaced with the in-memory test database.
+        - This approach tests the orchestration logic while isolating it from
+          external services and unpredictable data.
+
+    Parameters:
+        - monkeypatch (pytest.MonkeyPatch): Pytest's dependency injection mechanism.
+        - mock_db_connection (duckdb.Connection): The test database fixture.
+
+    Libraries Used:
+        - pytest: The testing framework, chosen for its powerful fixture system and
+          monkeypatching capabilities over unittest's more verbose mocking approach.
+        - unittest.mock.MagicMock: For creating mock objects that simulate external dependencies.
     """
     """Tests the full pipeline for a single ingredient, mocking RSL-SQL."""
 

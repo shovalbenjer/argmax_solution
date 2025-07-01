@@ -49,6 +49,21 @@ MODELS_QUOTAS = {
 logging.basicConfig(level=CONFIG["LOG_LEVEL"], format='%(asctime)s - %(levelname)s - %(message)s', force=True)
 
 class AsyncTokenBucket:
+    """Manages API rate limiting for asynchronous requests using a token bucket algorithm.
+
+    Detailed Description:
+        - This class ensures that requests to an API do not exceed specified rate limits (requests per minute and tokens per minute).
+        - It uses an asyncio.Lock to handle concurrent access safely.
+        - When a request is made, it checks if the limits have been reached. If so, it calculates the required delay and sleeps asynchronously before allowing the request to proceed.
+
+    Parameters:
+        - rpm_rate (int): The maximum number of requests allowed per minute.
+        - tpm_rate (int): The maximum number of tokens allowed per minute.
+
+    Libraries Used:
+        - asyncio: Used for asynchronous locking and sleeping, which is essential for non-blocking rate limiting in an async environment.
+        - time: Used to track the passage of time for resetting the rate limit counters.
+    """
     def __init__(self, rpm_rate: int, tpm_rate: int):
         self.rpm_rate = rpm_rate
         self.tpm_rate = tpm_rate
@@ -81,6 +96,22 @@ class AsyncTokenBucket:
 
 
 def build_vegan_prompt(recipe_rows: List[Dict[str, Any]]) -> list:
+    """Builds a prompt for the generative AI to classify recipes as vegan.
+
+    Detailed Description:
+        - This function takes a list of recipe data and formats it into a detailed prompt for a generative AI model.
+        - The prompt instructs the AI to act as a food scientist and determine if each recipe is strictly vegan.
+        - It specifies a chain-of-thought process for the AI to follow and the exact JSON output format required.
+
+    Parameters:
+        - recipe_rows (List[Dict[str, Any]]): A list of dictionaries, where each dictionary represents a recipe.
+
+    Returns:
+        - list: A list containing the user prompt and the desired JSON schema for the AI's response.
+
+    Libraries Used:
+        - json: Used to serialize the recipe data into a JSON string, which is embedded in the prompt. This is a standard and lightweight way to represent structured data.
+    """
     recipe_data_list = [{"recipe_id": r.get('_id'), "title": r.get('title'), "ingredients": json.loads(r.get('ingredients', '[]'))} for r in recipe_rows]
     user_prompt = f"""
     You are a meticulous food scientist. Your task is to determine if each recipe in the following list is strictly vegan.
@@ -103,6 +134,22 @@ def build_vegan_prompt(recipe_rows: List[Dict[str, Any]]) -> list:
 
 
 def build_keto_prompt(recipe_rows: List[Dict[str, Any]]) -> list:
+    """Builds a prompt for the generative AI to classify recipes as keto-friendly.
+
+    Detailed Description:
+        - This function constructs a prompt for a generative AI model to determine if recipes are keto-friendly.
+        - The prompt defines "strictly keto" based on carbohydrate content and instructs the AI to use its own knowledge to override potentially incorrect information in the provided data.
+        - It specifies a JSON output format for consistency.
+
+    Parameters:
+        - recipe_rows (List[Dict[str, Any]]): A list of dictionaries, where each dictionary represents a recipe.
+
+    Returns:
+        - list: A list containing the user prompt and the desired JSON schema for the AI's response.
+
+    Libraries Used:
+        - json: Used to serialize the recipe data into a JSON string for the prompt.
+    """
     recipe_data_list = []
     for row in recipe_rows:
         rag_summary = row.get('rag_summary', 'No analysis available')
@@ -142,6 +189,30 @@ async def classify_recipes(
     rate_limiter: AsyncTokenBucket,
     prompt_builder: Callable[[List[Dict[str, Any]]], list]
 ) -> Optional[List[Dict[str, Any]]]:
+    """Classifies a batch of recipes using a generative AI model.
+
+    Detailed Description:
+        - This asynchronous function sends a request to the configured generative AI model.
+        - It acquires a slot from the `AsyncTokenBucket` to respect rate limits.
+        - It builds the prompt using the provided `prompt_builder`, sends it to the model, and parses the JSON response.
+        - It includes error handling for API calls.
+
+    Parameters:
+        - recipes (List[Dict[str, Any]]): The list of recipes to classify.
+        - model_name (str): The name of the generative AI model to use.
+        - rate_limiter (AsyncTokenBucket): The rate limiter instance to manage API calls.
+        - prompt_builder (Callable): The function to use for building the classification prompt.
+
+    Returns:
+        - Optional[List[Dict[str, Any]]]: A list of classification results, or None if the API call fails.
+
+    Raises:
+        - Exception: Catches and logs any exception during the API call, returning None.
+
+    Libraries Used:
+        - google.generativeai: The official Google AI SDK for Python. It's used to interact with Gemini models.
+        - asyncio: Used for the `await` keyword, making the function non-blocking.
+    """
     if not recipes: return []
     estimated_tokens = (800 + 200) * len(recipes)
     await rate_limiter.acquire(estimated_tokens)
@@ -171,6 +242,27 @@ async def worker(
     pbar: tqdm,
     prompt_builder: Callable[[List[Dict[str, Any]]], list]
 ):
+    """An asynchronous worker that processes recipe classification tasks from a queue.
+
+    Detailed Description:
+        - This function runs in a loop, getting batches of recipes from an `asyncio.Queue`.
+        - For each batch, it calls `classify_recipes`. If the batch fails, it retries each recipe individually.
+        - It updates a `tqdm` progress bar.
+
+    Parameters:
+        - name (str): The name of the worker (for logging).
+        - model_name (str): The model to use for classification.
+        - rate_limiter (AsyncTokenBucket): The rate limiter for the API.
+        - batch_queue (asyncio.Queue): The queue from which to fetch recipe batches.
+        - results_list (List[Dict[str, Any]]): A list to store the classification results.
+        - pbar (tqdm): The progress bar to update.
+        - prompt_builder (Callable): The function for building prompts.
+
+    Libraries Used:
+        - asyncio: For managing the asynchronous worker loop and queue.
+        - tqdm: Provides a progress bar for monitoring the classification process.
+        - logging: For logging warnings and errors.
+    """
     while True:
         batch_id, batch_recipes_gen = await batch_queue.get()
         if batch_recipes_gen is None:
@@ -196,6 +288,27 @@ async def worker(
 
 
 async def run_classification_stage(df: pl.DataFrame, prompt_builder: Callable, stage_name: str) -> pl.DataFrame:
+    """Runs a complete classification stage for a given diet.
+
+    Detailed Description:
+        - This function orchestrates a classification stage (e.g., "Vegan").
+        - It creates a queue of recipe batches and a pool of worker tasks.
+        - Each worker uses a different model from the `MODELS_QUOTAS` configuration, allowing for parallel processing with different rate limits.
+        - It gathers the results from all workers and returns them as a Polars DataFrame.
+
+    Parameters:
+        - df (pl.DataFrame): The input DataFrame of recipes.
+        - prompt_builder (Callable): The function to build the prompt for this stage.
+        - stage_name (str): The name of the stage (e.g., "Vegan", "Keto") for logging.
+
+    Returns:
+        - pl.DataFrame: A DataFrame containing the classification results for the stage.
+
+    Libraries Used:
+        - asyncio: To create and manage the worker tasks concurrently.
+        - polars: For efficient data manipulation and DataFrame creation.
+        - tqdm: To display an overall progress bar for the stage.
+    """
     logging.info(f"🚀 Starting Stage: {stage_name} Classification...")
     work_queue = asyncio.Queue()
     all_results = []
@@ -220,6 +333,20 @@ async def run_classification_stage(df: pl.DataFrame, prompt_builder: Callable, s
 
 
 async def main_async():
+    """Main asynchronous function to run the ground truth generation pipeline.
+
+    Detailed Description:
+        - This function serves as the main entry point for the script.
+        - It loads the necessary configuration and API keys.
+        - It reads the input data, then runs the vegan and keto classification stages sequentially.
+        - Finally, it merges the results, converts list columns to strings to prevent CSV writing errors, and saves the final DataFrame.
+
+    Libraries Used:
+        - asyncio: Used to run the main asynchronous event loop.
+        - os: To get environment variables (the API key).
+        - polars: For reading the input CSV and manipulating the data.
+        - logging: For logging the progress of the pipeline.
+    """
     logging.info("🚀 Starting SOTA Decomposed Ground Truth Generation Pipeline...")
     gemini_api_key = os.getenv("GEMINI_API_KEY")
     if not gemini_api_key:

@@ -16,6 +16,27 @@ db_handler = DatabaseHandler()
 FUZZY_MATCH_THRESHOLD = 90
 
 def get_ingredient_context(raw_ingredient: str) -> Dict:
+    """Processes a raw ingredient string to generate a detailed context.
+
+    Detailed Description:
+        - This function implements a Hybrid Retrieval Cascade to analyze and enrich a single ingredient string.
+        - **Stage 1: Parsing:** It uses the `ingredient-parser` library to extract the name, quantity, and unit from the raw string.
+        - **Stage 2: Retrieval:** It performs a search in the database (handled by `DatabaseHandler`) for the parsed ingredient name to find its base nutritional data.
+        - **Stage 3: Normalization:** It calculates the total nutritional values (currently just carbohydrates) based on the retrieved data and the parsed quantity. A full implementation would handle unit conversions.
+        - **Stage 4: Assembly:** It combines the original string, parsed data, retrieved database record, and normalized values into a single dictionary.
+
+    Parameters:
+        - raw_ingredient (str): The raw ingredient string to process (e.g., "2 cups of all-purpose flour").
+
+    Returns:
+        - Dict: A dictionary containing the 'original', 'parsed', 'retrieved', and 'normalized' information for the ingredient.
+
+    Libraries Used:
+        - loguru: For enhanced logging with better formatting.
+        - ingredient_parser: A specialized library for parsing ingredient strings. It is superior to regex or simple string splitting because it understands the common structure of recipe ingredients.
+        - rapidfuzz: Although not directly used in this function's final version, it's often used for fuzzy string matching to handle variations in ingredient names.
+        - database_handler: A custom module for interacting with the ingredient database.
+    """
     # 1. Ingredient Parsing
     try:
         parsed = parse_ingredient(raw_ingredient, discard_isolated_stop_words=True)

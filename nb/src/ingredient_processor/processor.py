@@ -6,7 +6,26 @@ from loguru import logger
 from utils.db import get_db_connection
 
 def get_nutrition_data(ingredient_name: str) -> dict | None:
-    """Retrieves nutritional data for a given ingredient from the knowledge graph."""
+    """Retrieves nutritional data for an ingredient from the knowledge graph.
+
+    Detailed Description:
+        - This function connects to the SQLite database using a centralized connection handler.
+        - It executes a SQL query to select all columns from the `nutrition_facts` table
+          for a given ingredient name.
+        - It uses pandas to execute the query and fetch the results for convenience.
+
+    Parameters:
+        - ingredient_name (str): The name of the ingredient to look up.
+
+    Returns:
+        - dict | None: A dictionary containing the nutritional data if the ingredient is found,
+          otherwise None.
+
+    Libraries Used:
+        - pandas: Used with `read_sql` to execute the SQL query and return the results
+          in a structured DataFrame, which is easy to handle.
+        - utils.db: A custom utility to get a managed database connection.
+    """
     with get_db_connection() as conn:
         query = "SELECT * FROM nutrition_facts WHERE name = :name"
         df = pd.read_sql(query, conn, params={"name": ingredient_name})
@@ -15,7 +34,20 @@ def get_nutrition_data(ingredient_name: str) -> dict | None:
     return None
 
 def get_unit_conversion(ingredient_name: str, from_unit: str) -> float | None:
-    """Retrieves a unit conversion multiplier to grams."""
+    """Retrieves a unit conversion multiplier for converting to grams.
+
+    Detailed Description:
+        - This function queries the `unit_conversions` table in the knowledge graph.
+        - It specifically looks for a multiplier to convert a given volumetric or non-standard
+          unit (`from_unit`) into grams ('g') for a specific ingredient.
+
+    Parameters:
+        - ingredient_name (str): The name of the ingredient for the conversion.
+        - from_unit (str): The original unit (e.g., "cup", "tbsp").
+
+    Returns:
+        - float | None: The multiplication factor to convert to grams, or None if not found.
+    """
     with get_db_connection() as conn:
         query = """
             SELECT multiplier FROM unit_conversions
@@ -27,7 +59,19 @@ def get_unit_conversion(ingredient_name: str, from_unit: str) -> float | None:
     return None
 
 def get_vegan_info(ingredient_name: str) -> dict | None:
-    """Checks the vegan status of an ingredient."""
+    """Checks the vegan status of an ingredient against the vegan ontology.
+
+    Detailed Description:
+        - This function queries the `vegan_ontology` table in the knowledge graph.
+        - It checks for the presence of the ingredient term and returns its `is_vegan` status.
+
+    Parameters:
+        - ingredient_name (str): The ingredient term to check.
+
+    Returns:
+        - dict | None: A dictionary containing the boolean vegan status if the term is found,
+          otherwise None.
+    """
     with get_db_connection() as conn:
         query = "SELECT is_vegan FROM vegan_ontology WHERE term = :term"
         df = pd.read_sql(query, conn, params={"term": ingredient_name})
@@ -37,9 +81,30 @@ def get_vegan_info(ingredient_name: str) -> dict | None:
 
 
 def get_ingredient_context(raw_ingredient: str) -> dict:
-    """
-    Analyzes a raw ingredient string and returns a structured context.
-    This implements parsing and the Deterministic Normalization Engine.
+    """Analyzes a raw ingredient string and returns a structured, enriched context.
+
+    Detailed Description:
+        - This function orchestrates the full analysis of a single ingredient string.
+        - **1. Parsing:** It uses the `ingredient-parser` library to break down the raw string
+          into its constituent parts (name, quantity, unit). It includes error handling for
+          malformed strings.
+        - **2. Retrieval:** It calls the various getter functions (`get_nutrition_data`, `get_vegan_info`)
+          to retrieve all available information about the parsed ingredient name from the knowledge graph.
+        - **3. Normalization:** It performs a deterministic calculation of the total carbohydrates.
+          If a unit conversion is required (e.g., from "cups" to "grams"), it retrieves the
+          necessary multiplier and applies it.
+        - **4. Assembly:** It aggregates all the information—original, parsed, retrieved, and
+          normalized—into a single context dictionary, including any errors encountered.
+
+    Parameters:
+        - raw_ingredient (str): The raw ingredient string (e.g., "2 cups of flour").
+
+    Returns:
+        - dict: A dictionary containing the full context and analysis of the ingredient.
+
+    Libraries Used:
+        - ingredient_parser: For robustly parsing structured data from the ingredient string.
+        - loguru: For logging warnings and errors during the process.
     """
     context = {
         "original": raw_ingredient,

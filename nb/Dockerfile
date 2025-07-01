@@ -4,33 +4,41 @@ FROM jupyter/base-notebook
 # Set the working directory
 WORKDIR /usr/src/app
 
+# --- Install uv (a faster pip) using a multi-stage build ---
+# This copies the pre-built uv binary from the official image, which is the most reliable method.
+COPY --from=ghcr.io/astral-sh/uv:0.7.17 /uv /usr/local/bin/
+
 # --- System Dependencies ---
-# Switch to root user to install system-level dependencies
+# Install system-level dependencies as root
 USER root
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
-USER $NB_UID
 
-# --- Python Dependencies (Optimized for Caching) ---
-# 1. Copy only the requirements file first.
-# This layer will be cached as long as requirements.txt does not change.
+# --- Python Dependencies & Project Installation (as root) ---
+# 1. Copy requirements and install using uv.
 COPY requirements.txt .
+RUN uv pip install --system --no-cache -r requirements.txt
 
-# 2. Install dependencies. This is the most time-consuming step.
-# It will only re-run if requirements.txt is modified.
-RUN pip install --no-cache-dir -r requirements.txt
-
-# --- Project Installation ---
-# 3. Copy the rest of the application code.
-# Changes to your source code will now only invalidate this layer and subsequent ones.
+# 2. Copy the rest of the application code.
 COPY . .
 
-# 4. Install the project in editable mode.
-RUN pip install -e .
+# 3. Install the project in editable mode using uv.
+RUN uv pip install --system --no-cache -e .
 
-# --- Post-Install Setup ---
+# --- Post-Install Setup & Final User Switch ---
+# Create a data directory and set correct ownership before switching user
+RUN mkdir -p /usr/src/app/data && \
+    chown -R $NB_UID:$NB_GID /usr/src/app/data
+
+# Switch to the final user
+USER $NB_UID
+
+# Download the original ground truth sample for compatibility
+RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_sample.csv -o /usr/src/app/data/ground_truth_sample.csv
+
 # Download NLTK data required by the ingredient-parser-nlp library
 RUN python -c "import nltk; nltk.download('punkt'); nltk.download('wordnet')"
 

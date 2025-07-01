@@ -25,7 +25,26 @@ except ImportError:
     sys.exit(1)
 
 def load_and_prepare_data(data_paths: List[Path]) -> pd.DataFrame:
-    """Loads, combines, and cleans all evaluation data."""
+    """Loads, combines, and prepares all ground truth data for evaluation.
+
+    Detailed Description:
+        - This function takes a list of file paths to CSVs containing ground truth data.
+        - It iterates through each path, loading it into a pandas DataFrame.
+        - If a file does not contain 'keto' or 'vegan' columns, it infers the ground truth
+          label from the filename (e.g., a file named 'strict_keto.csv' is assumed to contain keto recipes).
+        - It combines all DataFrames into a single one.
+        - It then processes the 'ingredients' column, which is stored as a stringified list,
+          by safely evaluating it into an actual list of strings using a helper function.
+
+    Parameters:
+        - data_paths (List[Path]): A list of `pathlib.Path` objects pointing to the ground truth CSV files.
+
+    Returns:
+        - pd.DataFrame: A single DataFrame containing the combined and cleaned data.
+
+    Raises:
+        - FileNotFoundError: If no valid ground truth files are found at the specified paths.
+    """
     all_dfs = []
     for path in data_paths:
         if not path.exists():
@@ -66,7 +85,30 @@ def load_and_prepare_data(data_paths: List[Path]) -> pd.DataFrame:
     return combined_df
 
 def main(args):
-    """Main evaluation function."""
+    """Orchestrates the final model evaluation process.
+
+    Detailed Description:
+        - This is the main execution function for the evaluation script.
+        - It defines the paths to the various ground truth datasets based on command-line arguments.
+        - It calls `load_and_prepare_data` to get the complete, cleaned evaluation dataset.
+        - It then applies the `is_keto` and `is_vegan` classification functions to the 'ingredients_list'
+          column to generate predictions.
+        - Finally, it uses `sklearn.metrics.classification_report` to generate and print a detailed
+          report comparing the ground truth labels to the predictions for both keto and vegan classifications.
+
+    Parameters:
+        - args (argparse.Namespace): An object containing the command-line arguments, which specify the
+          paths to the different ground truth data files.
+
+    Returns:
+        - int: An exit code (0 for success, -1 for failure).
+
+    Libraries Used:
+        - pandas: For all data manipulation.
+        - scikit-learn: For generating the final classification report, which provides key metrics like
+          precision, recall, and F1-score. It is a standard for machine learning evaluation.
+        - loguru: For logging progress and errors.
+    """
     data_files = [
         Path(args.ground_truth),
         Path(args.strict_keto),
