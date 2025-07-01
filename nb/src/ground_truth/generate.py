@@ -43,8 +43,8 @@ load_dotenv()
 CONFIG = {
     "OUTPUT_DIR": Path("nb/src/data"),
     "GROUND_TRUTH_FILENAME": "personas_ground_truth.csv",
-    "SAMPLE_SIZE": int(os.getenv("RECIPE_SAMPLE_SIZE", 50)),
-    "BATCH_SIZE": int(os.getenv("BATCH_SIZE", 5)),
+    "SAMPLE_SIZE": 100,
+    "BATCH_SIZE": 25,
     "TEACHER_MODEL": os.getenv("TEACHER_MODEL", "qwen:latest"),
     "MLFLOW_TRACKING_URI": os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"),
     "OPENSEARCH_URL": os.getenv("OPENSEARCH_URL", "http://localhost:9200"),
