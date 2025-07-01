@@ -1,37 +1,40 @@
-FROM python:3.11-slim
+# Use the official Jupyter base image to ensure a working notebook environment
+FROM jupyter/base-notebook
 
-WORKDIR /app
+# Set the working directory
+WORKDIR /usr/src/app
 
-# Install system dependencies first, as they change infrequently
+# --- System Dependencies ---
+# Switch to root user to install system-level dependencies
+USER root
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
-    git \
     && rm -rf /var/lib/apt/lists/*
+USER $NB_UID
 
-# --- Optimized Caching for Python Dependencies ---
+# --- Python Dependencies (Optimized for Caching) ---
 # 1. Copy only the requirements file first.
-# As long as this file doesn't change, Docker will use the cached layer for pip install.
-COPY nb/requirements.txt .
+# This layer will be cached as long as requirements.txt does not change.
+COPY requirements.txt .
 
-# 2. Install dependencies. This is the most time-consuming layer.
+# 2. Install dependencies. This is the most time-consuming step.
+# It will only re-run if requirements.txt is modified.
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 3. Now, copy the rest of the application code.
+# --- Project Installation ---
+# 3. Copy the rest of the application code.
 # Changes to your source code will now only invalidate this layer and subsequent ones.
-COPY nb/src /app/src
-COPY tests /app/tests
-COPY nb/setup.py /app/setup.py
+COPY . .
 
-# --- Application Setup ---
-# Create data directory (can be done here, as it's a fast operation)
-RUN mkdir -p /app/data
+# 4. Install the project in editable mode.
+RUN pip install -e .
 
-# Download NLTK data required by the parser
+# --- Post-Install Setup ---
+# Download NLTK data required by the ingredient-parser-nlp library
 RUN python -c "import nltk; nltk.download('punkt'); nltk.download('wordnet')"
 
-# Expose the port
+# Expose the Jupyter Notebook port and set default command
 EXPOSE 8888
-
-# Set the entrypoint to run Jupyter Lab
-CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--notebook-dir=/app", "--ServerApp.token=''", "--ServerApp.password=''"]
+ENV JUPYTER_ENABLE_LAB=yes
+CMD ["start-notebook.sh", "--NotebookApp.token=''", "--NotebookApp.password=''"]

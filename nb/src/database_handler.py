@@ -1,34 +1,49 @@
 """
-Database Handler for Elasticsearch.
+Database Handler for accessing the project's Knowledge Graph.
 
-This module provides a dedicated interface for connecting to and querying
-the Elasticsearch database, as specified by the Argmax requirements.
+This module provides a simplified, high-level interface for querying
+the SQLite database (`knowledge_graph.db`). It abstracts away the direct
+SQL queries and connection management, offering clean functions to retrieve
+data for EDA, testing, or other analyses.
+
+It is built on top of the centralized db utility to ensure consistent
+database connection handling across the application.
 """
-from elasticsearch import Elasticsearch
+import pandas as pd
 from loguru import logger
-from typing import Optional, Dict, Any
+
+# Import the engine from our new centralized utility
+from utils.db import get_engine
 
 class DatabaseHandler:
-    _instance = None
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(DatabaseHandler, cls).__new__(cls)
-            try:
-                cls._instance.client = Elasticsearch(hosts=["http://localhost:9200"], request_timeout=10)
-                if not cls._instance.client.ping():
-                    raise ConnectionError("Could not connect to Elasticsearch")
-                logger.success("Connected to Elasticsearch successfully.")
-            except Exception as e:
-                logger.critical(f"Failed to connect to Elasticsearch: {e}")
-                cls._instance.client = None
-        return cls._instance
+    def __init__(self):
+        """Initializes the handler with the shared database engine."""
+        self.engine = get_engine()
+        logger.info(f"DatabaseHandler initialized with engine: {self.engine.url}")
 
-    def search_ingredient(self, ingredient_name: str) -> Optional[Dict[str, Any]]:
-        if not self.client: return None
+    def get_all_nutrition_facts(self) -> pd.DataFrame:
+        """Returns all records from the nutrition_facts table."""
         try:
-            # Using a 'match' query for better relevance scoring on text fields.
-            res = self.client.search(index="recipes", body={"query": {"match": {"description": ingredient_name}}}, size=1)
-            return res['hits']['hits'][0]['_source'] if res['hits']['hits'] else None
+            return pd.read_sql("SELECT * FROM nutrition_facts", self.engine)
         except Exception as e:
-            logger.error(f"Elasticsearch query for '{ingredient_name}' failed: {e}")
-            return None 
+            logger.error(f"Failed to get all nutrition facts: {e}")
+            return pd.DataFrame()
+
+    def get_all_unit_conversions(self) -> pd.DataFrame:
+        """Returns all records from the unit_conversions table."""
+        try:
+            return pd.read_sql("SELECT * FROM unit_conversions", self.engine)
+        except Exception as e:
+            logger.error(f"Failed to get all unit conversions: {e}")
+            return pd.DataFrame()
+
+    def get_all_vegan_ontology(self) -> pd.DataFrame:
+        """Returns all records from the vegan_ontology table."""
+        try:
+            return pd.read_sql("SELECT * FROM vegan_ontology", self.engine)
+        except Exception as e:
+            logger.error(f"Failed to get all vegan ontology: {e}")
+            return pd.DataFrame()
+
+# A global instance for easy access from other scripts, mimicking the original design.
+db_handler = DatabaseHandler() 

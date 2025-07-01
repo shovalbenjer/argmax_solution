@@ -12,23 +12,11 @@ Attributes:
     extensions (list): A list of `setuptools.Extension` objects, each defining a
         Cython module to be compiled.
 """
-from setuptools import setup, Extension
-from Cython.Build import cythonize
-import numpy
-
-# Define the extension module explicitly
-extensions = [
-    Extension(
-        # This defines the import path
-        name="nb.src.context_engine.fast_processor", 
-        # This is the source .pyx file
-        sources=["src/context_engine/fast_processor.pyx"],
-        # Include numpy headers, good practice for numerical code
-        include_dirs=[numpy.get_include()]
-    )
-]
+from setuptools import setup, find_packages
 
 setup(
-    ext_modules=cythonize(extensions),
-    zip_safe=False,
+    name="recipe_analysis",
+    version="0.1.0",
+    package_dir={"": "src"},
+    packages=find_packages(where='src'),
 ) 

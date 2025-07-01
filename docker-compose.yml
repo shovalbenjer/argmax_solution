@@ -1,6 +1,9 @@
+version: '3.8'
+
 services:
   os:
     image: opensearchproject/opensearch:latest
+    container_name: os
     environment:
       - discovery.type=single-node
       - bootstrap.memory_lock=true
@@ -21,7 +24,7 @@ services:
       - "9200:9200"
       - "9600:9600"
     networks:
-      - argmax
+      - argmax-net
     healthcheck:
       test: ["CMD-SHELL", "curl -s -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 10s
@@ -29,42 +32,78 @@ services:
       retries: 3
       start_period: 20s
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - argmax-net
+
+  mlflow:
+    image: python:3.11-slim
+    container_name: mlflow
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    networks:
+      - argmax-net
+    command: >
+      sh -c "pip install mlflow boto3 &&
+             mlflow server
+             --host 0.0.0.0
+             --port 5000
+             --backend-store-uri /mlflow"
+
   web:
     build:
-      context: web
+      context: ./web
       dockerfile: Dockerfile
-    environment:
-      - FLASK_APP=app.py
-      - FLASK_ENV=development
-      - FLASK_DEBUG=1
-      - OPENSEARCH_URL=http://os:9200
+    container_name: web
     ports:
       - "8080:8080"
     volumes:
-      - ./web/src:/app/web
+      - ./web/src:/app
     networks:
-      - argmax
+      - argmax-net
     depends_on:
-      os:
-        condition: service_healthy
+      - os
+    environment:
+      - OPENSEARCH_URL=http://os:9200
+      - FLASK_APP=app.py
+      - FLASK_RUN_HOST=0.0.0.0
+      - FLASK_RUN_PORT=8080
 
   nb:
     build:
-      context: .
-      dockerfile: nb/Dockerfile
-    environment:
-      - OPENSEARCH_URL=http://os:9200
+      context: ./nb
+      dockerfile: Dockerfile
+    container_name: nb
     ports:
       - "8888:8888"
+    volumes:
+      - ./nb:/usr/src/app
+    working_dir: /usr/src/app
     networks:
-      - argmax
+      - argmax-net
     depends_on:
-      os:
-        condition: service_healthy
+      - os
+      - ollama
+      - mlflow
+    environment:
+      - OPENSEARCH_URL=http://os:9200
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - OLLAMA_HOST=http://ollama:11434
 
 volumes:
   opensearch-data:
+  ollama-data:
+  mlflow-data:
 
 networks:
-  argmax:
+  argmax-net:
     driver: bridge
