@@ -191,7 +191,7 @@ Ensure all values are valid JSON. For `LIKE` operations, include '%' wildcards i
 For `IN` operations, the value must be a list of strings or numbers.
 Respond with ONLY the generated JSON object, nothing else.
 """
-        model_name = "qwen/qwen3-0.6b-gguf:q8_0"
+        model_name = "arctic-text2sql"
         
         if not self.llm_client.is_model_available(model_name):
             logger.error(f"Model '{model_name}' is not available for function calling.")
@@ -245,6 +245,6 @@ if __name__ == '__main__':
         json_query3 = await handler.generate_json_query(question3)
         print(json.dumps(json_query3, indent=2))
 
-    # Note: This test requires the Qwen model to be loaded and available in Ollama.
+    # Note: This test requires the Arctic model to be loaded and available in Ollama.
     # If the model is not running, the tests will fail with an error message.
     asyncio.run(main()) 

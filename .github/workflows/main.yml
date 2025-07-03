@@ -45,7 +45,7 @@ jobs:
         python-version: '3.11'
 
     - name: Cache Python Dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
@@ -55,7 +55,7 @@ jobs:
     - name: Install System Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y sqlite3 curl
+        sudo apt-get install -y sqlite3 curl redis-tools jq
 
     - name: Install Python Dependencies
       run: |
@@ -74,7 +74,7 @@ jobs:
       run: |
         python --version
         pip list | grep -E "(polars|pandas|redis|opensearch|loguru)"
-        echo "Redis status:" && redis-cli ping
+        echo "Redis status:" && redis-cli -h localhost ping
         echo "OpenSearch status:" && curl -s http://localhost:9200/_cluster/health | jq .status
 
     - name: Initialize Knowledge Database
@@ -159,14 +159,35 @@ jobs:
         python -m pip install --upgrade pip
         pip install flake8 black isort
 
+    - name: Check for Python files
+      run: |
+        echo "Python files found:"
+        find nb/src/ -name "*.py" -type f | head -10
+        echo "Total Python files: $(find nb/src/ -name "*.py" -type f | wc -l)"
+
     - name: Run Black (Code Formatting)
-      run: black --check --diff nb/src/
+      run: |
+        echo "Running Black code formatter..."
+        black --check --diff nb/src/ || {
+          echo "❌ Black formatting check failed. Run 'black nb/src/' to fix formatting issues."
+          exit 1
+        }
 
     - name: Run isort (Import Sorting)
-      run: isort --check-only --diff nb/src/
+      run: |
+        echo "Running isort import sorter..."
+        isort --check-only --diff nb/src/ || {
+          echo "❌ isort import sorting check failed. Run 'isort nb/src/' to fix import issues."
+          exit 1
+        }
 
     - name: Run Flake8 (Linting)
-      run: flake8 nb/src/ --max-line-length=100 --ignore=E203,W503
+      run: |
+        echo "Running Flake8 linter..."
+        flake8 nb/src/ --max-line-length=100 --ignore=E203,W503 --show-source --statistics || {
+          echo "❌ Flake8 linting check failed. Fix the issues above."
+          exit 1
+        }
 
   security:
     runs-on: ubuntu-latest
@@ -189,7 +210,7 @@ jobs:
       run: safety check --json --output safety-report.json
 
     - name: Upload Security Reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: security-reports
