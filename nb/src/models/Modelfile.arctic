@@ -1,7 +1,7 @@
 FROM ./Arctic-Text2SQL-R1-7B.Q4_K_M.gguf
 
 TEMPLATE """{{ .Prompt }}"""
-
+ 
 PARAMETER temperature 0.1
 PARAMETER top_p 0.9
 PARAMETER stop ";"

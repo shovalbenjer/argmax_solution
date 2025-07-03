@@ -1,0 +1,54 @@
+# Git and other VCS
+.git
+.gitignore
+.gitattributes
+
+# IDE / Editor specific
+.idea/
+.vscode/
+.cursor/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# Large model files and directories
+nb/src/models/
+*.gguf
+
+# Local data and databases (should be generated inside the container)
+nb/src/data/
+nb/src/raw_data/
+*.db
+*.sqlite3
+mlruns/
+
+# Notebook checkpoints
+.ipynb_checkpoints
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+wheels/
+*.spec
+
+# Logs and reports
+*.log
+htmlcov/
+.coverage
+*.txt
+*.md
+EXECUTION_WORKFLOW.md
+plan.txt
+execution_plan.md
+edge_cases.txt
+
+# OS specific
+.DS_Store

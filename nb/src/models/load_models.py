@@ -29,7 +29,7 @@ PARAMETER temperature 0.7
 PARAMETER top_p 0.8
 PARAMETER top_k 20
 PARAMETER presence_penalty 1.5
-PARAMETER num_ctx 32768"""
+PARAMETER num_ctx 4096"""
     
     print("Creating Qwen model...")
     response = requests.post('http://localhost:11434/api/create', 
@@ -54,7 +54,7 @@ PARAMETER num_ctx 32768"""
 def load_arctic_model():
     """Load Arctic Text2SQL model into Ollama."""
     # Get absolute path to the model file
-    model_path = Path("./Arctic-Text2SQL-R1-7B.Q4_K_M.gguf").resolve()
+    model_path = Path("./Arctic-Text2SQL-R1-7B-GGUF/Arctic-Text2SQL-R1-7B.Q4_K_M.gguf").resolve()
     print(f"Arctic model path: {model_path}")
     
     if not model_path.exists():
@@ -116,6 +116,12 @@ if __name__ == "__main__":
     arctic_success = load_arctic_model()
     
     # List available models
+    list_models()
+    
+    if qwen_success and arctic_success:
+        print("\nSUCCESS: Both models loaded successfully!")
+    else:
+        print("\nWARNING: Some models failed to load") 
     list_models()
     
     if qwen_success and arctic_success:

@@ -30,7 +30,7 @@ class Config:
     RAW_DATA_DIR = PROJECT_ROOT / "raw_data"
     
     # Classification thresholds
-    KETO_CARBS_THRESHOLD: float = config('KETO_CARBS_THRESHOLD', default=20.0, cast=float)
+    KETO_CARBS_THRESHOLD: float = config('KETO_CARBS_THRESHOLD', default=10.0, cast=float)
     
     # Rate limiting
     RPM_LIMIT: int = config('RPM_LIMIT', default=10, cast=int)

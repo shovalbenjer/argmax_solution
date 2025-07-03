@@ -9,6 +9,6 @@
     "presence_penalty" : 1.5,
     "top_k" : 20,
     "top_p" : 0.95,
-    "num_predict" : 32768,
-    "num_ctx": 40960
+    "num_predict" : 4096,
+    "num_ctx": 4096
 }

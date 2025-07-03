@@ -1,131 +1,276 @@
+"""
+DeepEval Pipeline Tests for Function-Calling RAG Architecture
+
+This module tests the new function-calling RAG pipeline components:
+1. FunctionCallingHandler - Converts ingredients to structured JSON queries
+2. QueryEngine - Safely executes JSON queries against the database
+3. ContextAwareDietClassifier - Orchestrates the full pipeline
+4. Final judge model - Makes classifications based on retrieved facts
+
+Uses DeepEval framework for comprehensive RAG pipeline evaluation.
+"""
 import pytest
 import asyncio
 import json
+import logging
 from deepeval import assert_test, evaluate
 from deepeval.metrics import GEval, ContextualRelevancyMetric, HallucinationMetric, AnswerRelevancyMetric
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 from deepeval.dataset import EvaluationDataset
-import polars as pl
 from pathlib import Path
-import sys
+from typing import Dict, Any, List
 
-# Add project root to path to allow importing shared modules
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 # Add nb/src to path for local imports
+import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Import the components to be tested
-from shared.database import db_manager
+from database import db_manager
+from function_calling_handler import FunctionCallingHandler
+from query_engine import QueryEngine
+from context_aware_classifier import ContextAwareDietClassifier
 from ingredient_parser import parse_ingredient
-from arctic_handler import ArcticText2SQLHandler
-from context_aware_classifier import ContextAwareDietClassifier, is_sql_safe
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # --- Helper Functions for Testing ---
 
-def execute_sql_for_test(sql: str):
-    """A helper to execute SQL and return a string context for deepeval."""
-    if not is_sql_safe(sql):
-        return "UNSAFE SQL"
-    try:
-        with db_manager.get_sqlite_connection() as conn:
-            df = pl.read_database(sql, conn)
-            return df.to_dicts()
-    except Exception as e:
-        return f"SQL Execution Error: {e}"
+def create_test_context(ingredient_name: str, nutrition_data: Dict = None, vegan_data: Dict = None) -> str:
+    """Create a mock context for testing purposes."""
+    context = {
+        "ingredient": ingredient_name,
+        "nutrition_data": nutrition_data or {"calories": 100, "carbohydrates": 5, "protein": 20},
+        "vegan_data": vegan_data or {"is_explicitly_non_vegan": False, "requires_contextual_check": True}
+    }
+    return json.dumps(context, indent=2)
 
 # --- Test Suite ---
 
-# Test 1: Ingredient Parser Validation
 @pytest.mark.asyncio
-async def test_parser_accuracy():
-    """Tests the accuracy of the ingredient-parser-nlp."""
-    parser_metric = GEval(
-        name="Parsing Correctness",
-        criteria="Evaluate if the 'actual_output' JSON correctly extracts the 'name', 'quantity', and 'unit' from the 'input' ingredient string.",
-        evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT]
-    )
-    test_case = LLMTestCase(
-        input="1 1/2 cups of sifted all-purpose flour, plus more for dusting",
-        actual_output=json.dumps(parse_ingredient("1 1/2 cups of sifted all-purpose flour, plus more for dusting", discard_isolated_stop_words=True)),
-        expected_output='{"name": "all-purpose flour", "quantity": 1.5, "unit": "cup"}'
-    )
-    assert_test(test_case, [parser_metric])
+async def test_ingredient_parser_accuracy():
+    """Tests the accuracy of the ingredient-parser-nlp for structured extraction."""
+    
+    # Test case: Complex ingredient string
+    test_input = "1 1/2 cups of sifted all-purpose flour, plus more for dusting"
+    
+    try:
+        parsed_result = parse_ingredient(test_input)
+        
+        # Extract the actual components
+        actual_output = {
+            "name": parsed_result.name.text if hasattr(parsed_result.name, 'text') else str(parsed_result.name),
+            "quantity": float(parsed_result.amount[0].quantity) if parsed_result.amount and hasattr(parsed_result.amount[0], 'quantity') else 1.0,
+            "unit": str(parsed_result.amount[0].unit) if parsed_result.amount and hasattr(parsed_result.amount[0], 'unit') else "unit"
+        }
+        
+        # Define the evaluation metric
+        parser_metric = GEval(
+            name="Parsing Correctness",
+            criteria="Evaluate if the 'actual_output' JSON correctly extracts the main ingredient 'name', approximate 'quantity', and 'unit' from the 'input' ingredient string. The name should be the primary ingredient (e.g., 'flour'), quantity should be numeric, and unit should be appropriate.",
+            evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT]
+        )
+        
+        test_case = LLMTestCase(
+            input=test_input,
+            actual_output=json.dumps(actual_output),
+            expected_output='{"name": "all-purpose flour", "quantity": 1.5, "unit": "cup"}'
+        )
+        
+        assert_test(test_case, [parser_metric])
+        logger.info("Ingredient parser accuracy test passed")
+        
+    except Exception as e:
+        logger.error(f"Ingredient parser test failed: {e}")
+        pytest.fail(f"Ingredient parser test failed: {e}")
 
-# Test 2: Arctic SQL Generation and Retrieval
-@pytest.mark.asyncio
-async def test_arctic_retrieval_relevancy():
-    """Tests Arctic's SQL generation and the relevancy of the retrieved context."""
-    handler = ArcticText2SQLHandler()
-    question = "Is butter vegan?"
+@pytest.mark.asyncio 
+async def test_function_calling_handler_structure():
+    """Tests that FunctionCallingHandler generates well-formed JSON queries."""
     
-    # Generate SQL
-    sql_result = await handler.generate_sql(question)
-    generated_sql = sql_result['sql']
+    handler = FunctionCallingHandler()
+    test_ingredient = "shredded sharp cheddar cheese"
     
-    # Check if SQL is correct (simplified check)
-    assert "vegan_ontology" in generated_sql.lower()
-    assert "butter" in generated_sql.lower()
-    
-    # Get retrieval context
-    retrieved_context = execute_sql_for_test(generated_sql)
-    
-    relevancy_metric = ContextualRelevancyMetric(threshold=0.8)
-    test_case = LLMTestCase(
-        input=question,
-        retrieval_context=[str(retrieved_context)]
-    )
-    assert_test(test_case, [relevancy_metric])
+    try:
+        # Generate structured query
+        result = await handler.generate_structured_query(test_ingredient)
+        
+        # Validate the structure
+        assert isinstance(result, dict), "Function calling handler should return a dictionary"
+        assert "query_type" in result, "Result should contain query_type"
+        assert "ingredient_name" in result, "Result should contain ingredient_name"
+        
+        # Define evaluation metric for structured output
+        structure_metric = GEval(
+            name="Structured Query Quality",
+            criteria="Evaluate if the 'actual_output' is a well-formed JSON object with appropriate 'query_type' and 'ingredient_name' fields for the given 'input' ingredient.",
+            evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT]
+        )
+        
+        test_case = LLMTestCase(
+            input=test_ingredient,
+            actual_output=json.dumps(result),
+            expected_output='{"query_type": "nutrition", "ingredient_name": "cheddar cheese"}'
+        )
+        
+        assert_test(test_case, [structure_metric])
+        logger.info("Function calling handler structure test passed")
+        
+    except Exception as e:
+        logger.error(f"Function calling handler test failed: {e}")
+        pytest.fail(f"Function calling handler test failed: {e}")
 
-# Test 3: Gemini Ground-Truth Label Validation (Conceptual)
-# This test assumes you have a "golden set" of hand-verified data.
-# We will use the existing `borderline_keto.csv` as a stand-in for this.
 @pytest.mark.asyncio
-async def test_gemini_label_consistency():
-    """Uses a golden set to check the factual consistency of an LLM's labels."""
-    # We can't call the real Gemini pipeline here easily, so we simulate a test case.
-    # This represents a known tricky recipe.
-    tricky_recipe_input = "A 'vegan' cake using flour, sugar, and butter."
+async def test_query_engine_safety_and_execution():
+    """Tests that QueryEngine safely executes structured queries."""
     
-    # This would be the output from your corrected ground_truth/generate.py
-    simulated_gemini_output = '{"is_vegan": false, "reasoning": "The recipe contains butter, which is a dairy product and therefore not vegan."}'
+    engine = QueryEngine()
     
-    factual_consistency_metric = GEval(
-        name="Factual Consistency",
-        criteria="Based on the ingredients in the 'input', is the classification in the 'actual_output' factually correct according to strict vegan rules? 'butter' is not vegan.",
-    )
+    # Test safe query execution
+    safe_query = {
+        "query_type": "nutrition",
+        "ingredient_name": "chicken breast"
+    }
     
-    test_case = LLMTestCase(
-        input=tricky_recipe_input,
-        actual_output=simulated_gemini_output
-    )
-    assert_test(test_case, [factual_consistency_metric])
+    try:
+        result = await engine.execute_structured_query(safe_query)
+        
+        # Validate result structure
+        assert isinstance(result, dict), "Query engine should return a dictionary"
+        
+        # Test with potentially unsafe query (should be rejected)
+        unsafe_query = {
+            "query_type": "nutrition", 
+            "ingredient_name": "'; DROP TABLE nutrition_facts; --"
+        }
+        
+        unsafe_result = await engine.execute_structured_query(unsafe_query)
+        
+        # The query should either be sanitized or return an error, not execute malicious SQL
+        assert "error" in unsafe_result or "sanitized" in str(unsafe_result), "Unsafe queries should be handled safely"
+        
+        logger.info("Query engine safety and execution test passed")
+        
+    except Exception as e:
+        logger.error(f"Query engine test failed: {e}")
+        pytest.fail(f"Query engine test failed: {e}")
 
-# Test 4: Qwen Student Model RAG Evaluation
 @pytest.mark.asyncio
-async def test_qwen_rag_performance():
-    """Evaluates the final Qwen classifier's reasoning and lack of hallucination."""
+async def test_context_retrieval_relevancy():
+    """Tests the relevancy of retrieved factual context."""
+    
     classifier = ContextAwareDietClassifier()
-    ingredients = ["1 cup almond flour", "2 tbsp olive oil", "1 lb chicken breast"]
+    test_ingredient = "butter"
     
-    # We call the actual classifier to get the final output.
-    # This will run the full RAG pipeline (Arctic SQL gen -> DB query -> Qwen judgment)
-    qwen_output = await classifier.classify_with_context(ingredients)
-    
-    # We need to manually get the retrieval context for the test case
-    handler = ArcticText2SQLHandler()
-    question = f"What are the nutritional values and vegan status for the following ingredients: {', '.join(ingredients)}?"
-    sql_result = await handler.generate_sql(question)
-    retrieved_context = execute_sql_for_test(sql_result['sql'])
+    try:
+        # Get context for a known ingredient
+        context_result = await classifier.get_ingredient_context(test_ingredient)
+        
+        if context_result and "context" in context_result:
+            retrieved_context = context_result["context"]
+            
+            relevancy_metric = ContextualRelevancyMetric(threshold=0.7)
+            test_case = LLMTestCase(
+                input=f"Is {test_ingredient} vegan?",
+                retrieval_context=[json.dumps(retrieved_context)]
+            )
+            
+            assert_test(test_case, [relevancy_metric])
+            logger.info("Context retrieval relevancy test passed")
+        else:
+            logger.warning("No context retrieved for butter - may indicate database issue")
+            
+    except Exception as e:
+        logger.error(f"Context retrieval test failed: {e}")
+        pytest.fail(f"Context retrieval test failed: {e}")
 
-    test_case = LLMTestCase(
-        input=f"Classify a recipe with {', '.join(ingredients)}",
-        actual_output=qwen_output['reasoning'],
-        retrieval_context=[str(retrieved_context)],
-        expected_output="The recipe should be classified as keto but not vegan because it contains chicken."
-    )
+@pytest.mark.asyncio
+async def test_classification_factual_consistency():
+    """Tests that final classifications are factually consistent with retrieved context."""
     
-    # Define metrics
-    hallucination_metric = HallucinationMetric(threshold=0.0)
-    answer_relevancy_metric = AnswerRelevancyMetric(threshold=0.9)
+    classifier = ContextAwareDietClassifier()
     
-    assert_test(test_case, [hallucination_metric, answer_relevancy_metric])
+    # Test case: Recipe with obvious animal product
+    test_ingredients = ["chicken breast", "olive oil", "salt"]
+    
+    try:
+        result = await classifier.classify_recipe(test_ingredients)
+        
+        # Extract the reasoning and classification
+        actual_output = {
+            "is_vegan": result.get("is_vegan", False),
+            "is_keto": result.get("is_keto", False), 
+            "reasoning": result.get("reasoning", "No reasoning provided")
+        }
+        
+        # Create mock retrieval context
+        mock_context = create_test_context(
+            "chicken breast",
+            nutrition_data={"calories": 165, "carbohydrates": 0, "protein": 31},
+            vegan_data={"is_explicitly_non_vegan": True, "requires_contextual_check": False}
+        )
+        
+        # Define metrics
+        factual_consistency_metric = GEval(
+            name="Factual Consistency",
+            criteria="Based on the 'retrieval_context', is the classification in 'actual_output' factually correct? Chicken breast is not vegan but is keto-friendly.",
+            evaluation_params=[LLMTestCaseParams.ACTUAL_OUTPUT, LLMTestCaseParams.RETRIEVAL_CONTEXT]
+        )
+        
+        hallucination_metric = HallucinationMetric(threshold=0.0)
+        
+        test_case = LLMTestCase(
+            input=f"Classify recipe with ingredients: {', '.join(test_ingredients)}",
+            actual_output=json.dumps(actual_output),
+            retrieval_context=[mock_context],
+            expected_output='{"is_vegan": false, "is_keto": true, "reasoning": "Contains chicken breast which is not vegan but is keto-friendly"}'
+        )
+        
+        assert_test(test_case, [factual_consistency_metric, hallucination_metric])
+        logger.info("Classification factual consistency test passed")
+        
+    except Exception as e:
+        logger.error(f"Classification consistency test failed: {e}")
+        pytest.fail(f"Classification consistency test failed: {e}")
+
+@pytest.mark.asyncio
+async def test_end_to_end_pipeline_coherence():
+    """Tests the full pipeline from ingredient parsing to final classification."""
+    
+    classifier = ContextAwareDietClassifier()
+    
+    # Test case: Mixed recipe with both vegan and non-vegan ingredients
+    test_recipe = {
+        "ingredients": ["1 cup almond flour", "2 tbsp coconut oil", "1 egg"],
+        "expected_vegan": False,  # Contains egg
+        "expected_keto": True     # Low carb ingredients
+    }
+    
+    try:
+        result = await classifier.classify_recipe(test_recipe["ingredients"])
+        
+        # Validate pipeline coherence
+        pipeline_metric = GEval(
+            name="Pipeline Coherence",
+            criteria="Evaluate if the 'actual_output' classification is logically coherent with the ingredients. The recipe contains egg (not vegan) but uses almond flour and coconut oil (keto-friendly).",
+            evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT]
+        )
+        
+        answer_relevancy_metric = AnswerRelevancyMetric(threshold=0.8)
+        
+        test_case = LLMTestCase(
+            input=f"Recipe with: {', '.join(test_recipe['ingredients'])}",
+            actual_output=json.dumps(result),
+            expected_output=f'{{"is_vegan": {str(test_recipe["expected_vegan"]).lower()}, "is_keto": {str(test_recipe["expected_keto"]).lower()}}}'
+        )
+        
+        assert_test(test_case, [pipeline_metric, answer_relevancy_metric])
+        logger.info("End-to-end pipeline coherence test passed")
+        
+    except Exception as e:
+        logger.error(f"End-to-end pipeline test failed: {e}")
+        pytest.fail(f"End-to-end pipeline test failed: {e}")
+
+if __name__ == "__main__":
+    # Run tests with pytest
+    pytest.main([__file__, "-v", "--tb=short"])

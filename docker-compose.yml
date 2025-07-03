@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   os:
     image: opensearchproject/opensearch:latest
@@ -39,8 +37,20 @@ services:
       - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
+      - ./nb/src/models:/models
     networks:
       - argmax-net
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - argmax-net
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
 
   mlflow:
     image: python:3.11-slim
@@ -93,15 +103,19 @@ services:
     depends_on:
       - os
       - ollama
+      - redis
       - mlflow
     environment:
       - OPENSEARCH_URL=http://os:9200
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - OLLAMA_HOST=http://ollama:11434
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
 
 volumes:
   opensearch-data:
   ollama-data:
+  redis-data:
   mlflow-data:
 
 networks:

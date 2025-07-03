@@ -16,15 +16,16 @@ RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parque
 
 # Copy requirements first to leverage Docker cache
 COPY web/requirements.txt .
-COPY shared/requirements.txt shared-requirements.txt
-RUN pip install --no-cache-dir -r shared-requirements.txt -r requirements.txt
+# Use nb/setup.py instead of shared/requirements.txt
+COPY nb/setup.py nb-setup.py
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy shared modules and application source code
-COPY shared/ /app/shared/
+# Copy modules and application source code - use nb/src instead of shared
+COPY nb/src/ /app/nb_src/
 COPY web/src/ /app
 
 # Expose the port the app runs on
 EXPOSE 8080
 
-# Command to run the application - make init.sh executable first
-CMD ["sh", "-c", "chmod +x /app/init.sh && /app/init.sh"]
+# Command to run the application
+CMD ["python", "app.py"]
