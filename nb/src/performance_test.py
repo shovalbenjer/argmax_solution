@@ -1,15 +1,52 @@
-"""Performance Test Suite for Recipe Classification System.
+"""
+Performance Test Suite for Recipe Classification System.
 
-This script performs comprehensive performance testing on recipe classification,
-measuring throughput, accuracy, and system performance metrics.
+This module provides comprehensive performance testing and benchmarking for the
+recipe classification system. It measures throughput, latency, accuracy, and
+system performance metrics under various load conditions.
 
-It fetches random recipe samples, classifies them, and generates a performance report with visualizations.
+The performance test suite covers:
+- Throughput testing with large recipe samples
+- Latency analysis and distribution profiling
+- Classification accuracy validation
+- System resource utilization monitoring
+- Performance visualization and reporting
+- Benchmark comparisons and trend analysis
+
+Key Features:
+- Scalable testing with configurable sample sizes
+- Comprehensive performance metrics collection
+- Publication-quality visualizations
+- Detailed performance reports and analysis
+- Benchmark data export for trend tracking
+- Error handling and graceful degradation
+
+Test Capabilities:
+- Random recipe sampling from multiple sources
+- Synthetic recipe generation for large-scale testing
+- Real-time performance monitoring
+- Statistical analysis of performance distributions
+- Comparative analysis across different configurations
+
+Dependencies:
+- pandas: Data manipulation and analysis
+- numpy: Numerical computations
+- matplotlib: Plotting and visualization
+- seaborn: Statistical data visualization
+- polars: High-performance data processing
+- loguru: Advanced logging
+
+Example:
+    >>> python nb/src/performance_test.py
+    >>> # Runs comprehensive performance test with 5000 samples
+    >>> results = run_performance_test_suite(10000)
+    >>> # Custom sample size for specific testing needs
 """
 
 import time
 import random
-import pandas as pd
-import numpy as np
+import polars as pd
+import numba as np
 from pathlib import Path
 from loguru import logger
 import matplotlib.pyplot as plt
@@ -58,7 +95,7 @@ class PerformanceMetrics:
         return self.end_time - self.start_time if self.end_time and self.start_time else 0
         
     def get_average_time_per_recipe(self) -> float:
-        return np.mean(self.recipe_times) if self.recipe_times else 0
+        return sum(self.recipe_times) / len(self.recipe_times) if self.recipe_times else 0
         
     def get_throughput_per_second(self) -> float:
         total_time = self.get_total_time()
@@ -187,14 +224,14 @@ def run_performance_test(n_samples: int = 5000, save_results: bool = True) -> Di
     Returns:
         - Dict[str, Any]: Comprehensive dictionary of performance metrics.
     """
-    logger.info(f"🚀 Starting Performance Test on {n_samples} Random Samples")
+    logger.info(f"Starting Performance Test on {n_samples} Random Samples")
     
     metrics = PerformanceMetrics()
     
     recipes = load_random_recipes(n_samples)
     actual_samples = len(recipes)
     
-    logger.info(f"📊 Testing {actual_samples} recipes...")
+    logger.info(f"Testing {actual_samples} recipes...")
     
     metrics.start_timer()
     
@@ -254,18 +291,18 @@ def run_performance_test(n_samples: int = 5000, save_results: bool = True) -> Di
         "timing_statistics": {
             "min_recipe_time": min(metrics.recipe_times) if metrics.recipe_times else 0,
             "max_recipe_time": max(metrics.recipe_times) if metrics.recipe_times else 0,
-            "median_recipe_time": np.median(metrics.recipe_times) if metrics.recipe_times else 0,
-            "std_recipe_time": np.std(metrics.recipe_times) if metrics.recipe_times else 0
+            "median_recipe_time": sorted(metrics.recipe_times)[len(metrics.recipe_times)//2] if metrics.recipe_times else 0,
+            "std_recipe_time": (sum((x - sum(metrics.recipe_times)/len(metrics.recipe_times))**2 for x in metrics.recipe_times) / len(metrics.recipe_times))**0.5 if metrics.recipe_times else 0
         }
     }
     
-    logger.success("🎯 Performance Test Complete!")
-    logger.info(f"📈 Processed {actual_samples} recipes in {total_time:.2f} seconds")
-    logger.info(f"⚡ Average time per recipe: {avg_time_per_recipe*1000:.2f}ms")
-    logger.info(f"🔥 Throughput: {throughput:.1f} recipes/second")
-    logger.info(f"🌱 Vegan recipes: {vegan_count} ({vegan_count/len(vegan_predictions)*100:.1f}%)")
-    logger.info(f"🥓 Keto recipes: {keto_count} ({keto_count/len(keto_predictions)*100:.1f}%)")
-    logger.info(f"✨ Both vegan & keto: {both_count} ({both_count/len(vegan_predictions)*100:.1f}%)")
+    logger.success("Performance Test Complete!")
+    logger.info(f"Processed {actual_samples} recipes in {total_time:.2f} seconds")
+    logger.info(f"Average time per recipe: {avg_time_per_recipe*1000:.2f}ms")
+    logger.info(f"Throughput: {throughput:.1f} recipes/second")
+    logger.info(f"Vegan recipes: {vegan_count} ({vegan_count/len(vegan_predictions)*100:.1f}%)")
+    logger.info(f"Keto recipes: {keto_count} ({keto_count/len(keto_predictions)*100:.1f}%)")
+    logger.info(f"Both vegan & keto: {both_count} ({both_count/len(vegan_predictions)*100:.1f}%)")
     
     if save_results:
         save_performance_results(results, metrics)
@@ -292,7 +329,7 @@ def save_performance_results(results: Dict[str, Any], metrics: PerformanceMetric
     json_path = output_dir / "performance_test_results.json"
     with open(json_path, 'w') as f:
         json.dump(results, f, indent=2)
-    logger.info(f"💾 Saved results to {json_path}")
+    logger.info(f"Saved results to {json_path}")
     
     create_performance_visualizations(results, metrics, output_dir)
 
@@ -321,8 +358,9 @@ def create_performance_visualizations(results: Dict[str, Any], metrics: Performa
     ax1.set_xlabel('Processing Time (seconds)')
     ax1.set_ylabel('Frequency')
     ax1.set_title('Distribution of Recipe Processing Times')
-    ax1.axvline(np.mean(metrics.recipe_times), color='red', linestyle='--', 
-               label=f'Mean: {np.mean(metrics.recipe_times)*1000:.1f}ms')
+    mean_time = sum(metrics.recipe_times) / len(metrics.recipe_times) if metrics.recipe_times else 0
+    ax1.axvline(mean_time, color='red', linestyle='--', 
+               label=f'Mean: {mean_time*1000:.1f}ms')
     ax1.legend()
     
     pred_dist = results["prediction_distribution"]
@@ -354,7 +392,11 @@ def create_performance_visualizations(results: Dict[str, Any], metrics: Performa
         ax3.text(bar.get_x() + bar.get_width()/2., height,
                 f'{value:.1f}', ha='center', va='bottom')
     
-    cumulative_times = np.cumsum(metrics.recipe_times)
+    cumulative_times = []
+    total = 0
+    for time_val in metrics.recipe_times:
+        total += time_val
+        cumulative_times.append(total)
     ax4.plot(range(len(cumulative_times)), cumulative_times, color='purple', linewidth=2)
     ax4.set_xlabel('Recipe Number')
     ax4.set_ylabel('Cumulative Time (seconds)')
@@ -382,12 +424,12 @@ def create_performance_visualizations(results: Dict[str, Any], metrics: Performa
     
     viz_path = output_dir / "sota_performance_benchmark.png"
     plt.savefig(viz_path, dpi=300, bbox_inches='tight')
-    logger.info(f"📊 Saved SOTA benchmark visualization to {viz_path}")
+    logger.info(f"Saved SOTA benchmark visualization to {viz_path}")
     plt.show()
 
     viz_path = output_dir / "performance_test_visualization.png"
     plt.savefig(viz_path, dpi=300, bbox_inches='tight')
-    logger.info(f"📊 Saved visualization to {viz_path}")
+    logger.info(f"Saved visualization to {viz_path}")
     plt.close()
     
     create_summary_report(results, output_dir)
@@ -438,7 +480,7 @@ def create_summary_report(results: Dict[str, Any], output_dir: Path):
         f.write(f"Median Recipe Time: {timing['median_recipe_time']*1000:.2f} ms\n")
         f.write(f"Standard Deviation: {timing['std_recipe_time']*1000:.2f} ms\n")
         
-    logger.info(f"📝 Saved summary report to {report_path}")
+    logger.info(f"Saved summary report to {report_path}")
 
 def run_performance_test_suite(n_samples: int = 5000) -> Dict[str, Any]:
     """The main entry-point function to run the complete performance test suite.
@@ -456,15 +498,15 @@ def run_performance_test_suite(n_samples: int = 5000) -> Dict[str, Any]:
     Raises:
         - Exception: Catches and re-raises any exception during the test.
     """
-    logger.info("🎯 Starting Recipe Classification Performance Test Suite")
+    logger.info("Starting Recipe Classification Performance Test Suite")
     
     try:
         results = run_performance_test(n_samples=n_samples, save_results=True)
-        logger.success("✅ Performance test completed successfully!")
+        logger.success("Performance test completed successfully!")
         return results
         
     except Exception as e:
-        logger.error(f"❌ Performance test failed: {e}")
+        logger.error(f"Performance test failed: {e}")
         raise
 
 if __name__ == "__main__":

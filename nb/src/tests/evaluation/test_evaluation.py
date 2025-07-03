@@ -9,7 +9,7 @@ and the (mocked) student model API.
 import pytest
 from unittest.mock import MagicMock
 import polars as pl
-import numpy as np
+import numba as np
 
 from src.evaluation import main as evaluation_main
 
@@ -38,8 +38,8 @@ def test_numba_accuracy():
     predicted labels.
     """
     """Tests the Numba JIT function for accuracy calculation."""
-    y_true = np.array(["a", "b", "a", "b"])
-    y_pred = np.array(["a", "a", "a", "b"])
+    y_true = ["a", "b", "a", "b"]
+    y_pred = ["a", "a", "a", "b"]
     accuracy = evaluation_main.calculate_accuracy_numba(y_true, y_pred)
     assert accuracy == 0.75
 

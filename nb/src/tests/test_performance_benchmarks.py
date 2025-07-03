@@ -1,8 +1,55 @@
 #!/usr/bin/env python3
 """
-Phase 6 Validation: Performance Benchmarking KPIs
+Performance Benchmark Test Suite for Diet Classification System
 
-Validates system performance against throughput and latency benchmarks.
+This module provides comprehensive performance benchmarking and validation
+against specific KPI benchmarks for the diet classification system. It measures
+throughput, latency, memory usage, and error rates to ensure the system meets
+production performance requirements.
+
+The benchmark suite covers:
+- Single ingredient classification performance
+- Full recipe classification throughput
+- Memory usage monitoring and optimization
+- Error rate validation and monitoring
+- Latency distribution analysis (P95, P99)
+- Concurrent request handling capability
+
+Key Benchmark Areas:
+- Throughput: Minimum 2.0 recipes per second
+- Latency: Maximum 500ms average, 1000ms P95
+- Memory: Maximum 2.0GB usage
+- Error Rate: Maximum 5% error rate
+- Concurrency: Support for 5+ concurrent requests
+- Performance consistency and reliability
+
+Benchmark Features:
+- Comprehensive performance metrics collection
+- Statistical analysis of latency distributions
+- Memory usage monitoring and profiling
+- Error rate calculation and validation
+- Throughput measurement and optimization
+- Performance regression detection
+
+Performance Benchmarks:
+- min_recipes_per_second: 2.0 recipes/second
+- max_avg_latency_ms: 500.0 milliseconds
+- max_memory_usage_gb: 2.0 gigabytes
+- max_error_rate: 0.05 (5%)
+- min_concurrent_requests: 5 requests
+- max_p95_latency_ms: 1000.0 milliseconds
+
+Dependencies:
+- psutil: System resource monitoring
+- statistics: Statistical analysis and calculations
+- time: Performance timing and measurement
+- json: Data serialization
+- logging: Comprehensive logging and reporting
+
+Example:
+    >>> python nb/src/tests/test_performance_benchmarks.py
+    >>> # Run complete performance benchmark suite
+    >>> sys.exit(main())
 """
 import sys
 import time
@@ -31,7 +78,28 @@ BENCHMARKS = {
 }
 
 def generate_test_recipes(count=50):
-    """Generate test recipes for performance testing."""
+    """
+    Generate test recipes for performance testing.
+    
+    This function creates a diverse set of test recipes with different dietary
+    characteristics to ensure comprehensive performance testing across various
+    ingredient combinations and classification scenarios.
+    
+    Recipe Types:
+        - Keto recipes: High protein, low carb ingredients
+        - Vegan recipes: Plant-based ingredients
+        - Mixed recipes: Combination of various ingredient types
+        
+    Args:
+        count (int): Number of test recipes to generate. Defaults to 50.
+        
+    Returns:
+        list: List of recipe dictionaries with id, ingredients (JSON), and ingredients_list
+        
+    Example:
+        >>> recipes = generate_test_recipes(10)
+        >>> print(f"Generated {len(recipes)} test recipes")
+    """
     
     # Base ingredients for different recipe types
     keto_ingredients = ["chicken breast", "spinach", "olive oil", "avocado", "cheese", "eggs"]
@@ -62,7 +130,38 @@ def generate_test_recipes(count=50):
     return recipes
 
 def measure_single_classification_performance():
-    """Measure performance of single ingredient classification."""
+    """
+    Measure performance of single ingredient classification.
+    
+    This function measures the performance characteristics of individual
+    ingredient classification, including latency, error rates, and
+    statistical distributions for both keto and vegan classifications.
+    
+    Test Ingredients:
+        - Animal proteins: chicken breast, eggs, salmon, cheese
+        - Vegetables: spinach, broccoli, tomatoes, lettuce
+        - Fats: olive oil, butter, avocado
+        - Carbohydrates: flour, sugar, quinoa, black beans
+        - Dairy: milk
+        
+    The function measures:
+    - Average latency for keto classification
+    - Average latency for vegan classification
+    - P95 latency for both classifications
+    - Error rates and handling
+    - Performance consistency
+        
+    Returns:
+        dict: Dictionary containing performance metrics for single ingredient classification
+        
+    Raises:
+        Exception: If classification functions fail unexpectedly
+        
+    Example:
+        >>> results = measure_single_classification_performance()
+        >>> print(f"Keto avg latency: {results['keto_avg_latency_ms']:.2f}ms")
+        >>> print(f"Vegan avg latency: {results['vegan_avg_latency_ms']:.2f}ms")
+    """
     from diet_classifiers import is_ingredient_keto, is_ingredient_vegan
     
     logger.info("Measuring single ingredient classification performance...")
@@ -110,7 +209,39 @@ def measure_single_classification_performance():
     }
 
 def measure_recipe_classification_performance():
-    """Measure performance of full recipe classification."""
+    """
+    Measure performance of full recipe classification.
+    
+    This function measures the performance characteristics of full recipe
+    classification, including throughput, latency, error rates, and
+    batch processing capabilities.
+    
+    Performance Metrics:
+        - Average recipe processing latency
+        - P95 recipe processing latency
+        - Maximum recipe processing latency
+        - Throughput (recipes per second)
+        - Error rates for individual and batch processing
+        - Performance consistency across different recipe types
+        
+    The function validates:
+    - Recipe classification accuracy and speed
+    - Batch processing efficiency
+    - Error handling and recovery
+    - Throughput optimization
+    - Performance scalability
+        
+    Returns:
+        dict: Dictionary containing performance metrics for recipe classification
+        
+    Raises:
+        Exception: If recipe classification functions fail unexpectedly
+        
+    Example:
+        >>> results = measure_recipe_classification_performance()
+        >>> print(f"Throughput: {results['recipes_per_second']:.2f} recipes/second")
+        >>> print(f"Avg latency: {results['avg_recipe_latency_ms']:.2f}ms")
+    """
     from diet_classifiers import is_keto, is_vegan
     
     logger.info("Measuring recipe classification performance...")
@@ -165,7 +296,38 @@ def measure_recipe_classification_performance():
     }
 
 def measure_memory_usage():
-    """Measure memory usage during classification."""
+    """
+    Measure memory usage during classification operations.
+    
+    This function monitors memory consumption during classification operations
+    to ensure the system stays within memory limits and doesn't experience
+    memory leaks or excessive resource usage.
+    
+    Memory Metrics:
+        - Baseline memory usage before classification
+        - Peak memory usage during classification
+        - Average memory usage during operations
+        - Memory increase from baseline
+        - Memory efficiency and optimization
+        
+    The function validates:
+    - Memory usage stays within limits (2GB max)
+    - No memory leaks during repeated operations
+    - Efficient memory utilization
+    - Memory cleanup after operations
+    - Resource management effectiveness
+        
+    Returns:
+        dict: Dictionary containing memory usage metrics
+        
+    Raises:
+        Exception: If memory monitoring fails unexpectedly
+        
+    Example:
+        >>> results = measure_memory_usage()
+        >>> print(f"Peak memory: {results['peak_memory_gb']:.2f}GB")
+        >>> print(f"Memory increase: {results['memory_increase_gb']:.2f}GB")
+    """
     logger.info("Measuring memory usage...")
     
     process = psutil.Process(os.getpid())

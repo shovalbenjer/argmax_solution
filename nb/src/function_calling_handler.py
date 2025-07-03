@@ -1,9 +1,34 @@
 """
 Function-Calling Handler for Query Generation
 
-This module uses an LLM (Qwen) to translate natural language question
-into a structured JSON query, based on a predefined schema. This decouples
-the LLM from SQL syntax and improves robustness.
+This module implements a sophisticated natural language to structured query
+translation system using function-calling LLMs. It bridges the gap between
+user-friendly natural language questions and precise database operations.
+
+The FunctionCallingHandler class provides:
+- Natural language question parsing
+- Structured JSON query generation
+- Database schema context integration
+- LLM-based query optimization
+- Comprehensive error handling
+
+The system uses a predefined JSON schema that maps to SQL operations,
+ensuring consistent and safe database queries while maintaining the
+flexibility of natural language input.
+
+Key Features:
+- Schema-driven query generation
+- Context-aware database understanding
+- Robust error handling and fallback
+- Async support for high-throughput scenarios
+- Comprehensive logging and debugging
+
+Example:
+    >>> handler = FunctionCallingHandler()
+    >>> question = "What are the calories for chicken breast?"
+    >>> json_query = await handler.generate_json_query(question)
+    >>> print(json_query)
+    {'operation': 'search', 'table': 'nutrition_facts', ...}
 """
 import json
 from typing import Dict, Any, List, Optional
@@ -16,17 +41,59 @@ logger = logging.getLogger(__name__)
 
 class FunctionCallingHandler:
     """
-    Handles translation of natural language questions to structured JSON queries
-    using a function-calling approach with an LLM.
+    Handles translation of natural language questions to structured JSON queries.
+    
+    This class implements a sophisticated pipeline that converts user-friendly
+    natural language questions into precise, structured JSON queries that can
+    be safely executed against the database. It uses LLM-based function calling
+    with comprehensive schema context to ensure accurate translations.
+    
+    The handler maintains a detailed understanding of the database schema and
+    provides the LLM with sufficient context to generate appropriate queries.
+    It includes robust error handling and supports both simple and complex
+    query patterns.
+    
+    Attributes:
+        llm_client: LLM client for query generation
+        schema_context: Database schema context for LLM prompts
+        json_schema: Structured JSON schema definition
+        
+    Example:
+        >>> handler = FunctionCallingHandler()
+        >>> question = "Find high-protein foods with less than 10g carbs"
+        >>> result = await handler.generate_json_query(question)
+        >>> if "error" not in result:
+        ...     print(f"Generated query: {result['operation']} on {result['table']}")
     """
     
     def __init__(self):
+        """
+        Initialize the function calling handler with LLM client and schema context.
+        
+        Sets up the LLM client for query generation and builds comprehensive
+        database schema context that will be provided to the LLM for accurate
+        query generation.
+        """
         self.llm_client = LLMClient()
         self.schema_context = self._build_schema_context()
         self.json_schema = self._get_json_schema()
 
     def _get_json_schema(self) -> str:
-        """Defines the structured JSON schema the LLM should generate."""
+        """
+        Define the structured JSON schema for LLM query generation.
+        
+        Returns a comprehensive JSON schema that defines the structure
+        and constraints for generated queries. This schema ensures that
+        LLM outputs are consistent and can be safely converted to SQL.
+        
+        Returns:
+            str: JSON string containing the query schema definition
+            
+        Example:
+            >>> schema = handler._get_json_schema()
+            >>> print(schema)
+            '{"operation": "search | aggregate", ...}'
+        """
         schema = {
             "operation": "search | aggregate",
             "table": "nutrition_facts | vegan_ontology | unit_conversions",
@@ -44,7 +111,21 @@ class FunctionCallingHandler:
         return json.dumps(schema, indent=2)
 
     def _build_schema_context(self) -> str:
-        """Builds the database schema context for the LLM prompt."""
+        """
+        Build comprehensive database schema context for LLM prompts.
+        
+        Creates a detailed description of the database schema that helps
+        the LLM understand the available tables, columns, and their purposes.
+        This context is crucial for generating accurate and meaningful queries.
+        
+        Returns:
+            str: Formatted schema context for LLM prompts
+            
+        Example:
+            >>> context = handler._build_schema_context()
+            >>> print("nutrition_facts" in context)
+            True
+        """
         context = """
 DATABASE SCHEMA CONTEXT:
 
@@ -64,7 +145,35 @@ DATABASE SCHEMA CONTEXT:
 
     async def generate_json_query(self, question: str) -> Dict[str, Any]:
         """
-        Generates a structured JSON query from a natural language question.
+        Generate a structured JSON query from a natural language question.
+        
+        This method implements the core translation logic, converting user
+        questions into structured JSON queries that can be safely executed
+        against the database. It uses LLM-based function calling with
+        comprehensive schema context to ensure accurate translations.
+        
+        The method includes robust error handling and provides detailed
+        logging for debugging query generation issues.
+        
+        Args:
+            question: Natural language question to convert to structured query
+            
+        Returns:
+            Dict containing the generated JSON query or error information
+            
+        Raises:
+            ValueError: If LLM returns an error response
+            TypeError: If LLM returns unexpected data type
+            json.JSONDecodeError: If LLM response cannot be parsed as JSON
+            
+        Example:
+            >>> question = "What are the calories for chicken breast?"
+            >>> result = await handler.generate_json_query(question)
+            >>> if "error" not in result:
+            ...     print(f"Operation: {result['operation']}")
+            ...     print(f"Table: {result['table']}")
+            ... else:
+            ...     print(f"Error: {result['error']}")
         """
         prompt = f"""You are an expert at converting user questions into structured JSON queries.
 Your task is to populate the following JSON schema to answer the user's question.
@@ -110,6 +219,12 @@ if __name__ == '__main__':
     import asyncio
     
     async def main():
+        """
+        Example usage and testing of the FunctionCallingHandler.
+        
+        Demonstrates various query generation scenarios including simple
+        searches, aggregations, and complex filtering operations.
+        """
         handler = FunctionCallingHandler()
         
         # Test 1: Simple Search

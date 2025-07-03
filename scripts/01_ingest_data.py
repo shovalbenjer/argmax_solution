@@ -1,3 +1,48 @@
+"""
+Data Ingestion Script for Diet Classification Knowledge Base
+
+This script performs the initial data ingestion and database setup for the
+diet classification system. It processes raw CSV data from nutrition facts,
+vegan ontology, and unit conversions, then populates a SQLite database with
+cleaned and normalized data.
+
+The script handles comprehensive data processing including:
+- Nutrition facts with 80+ nutritional components per food item
+- Vegan ontology with aliases and classification flags
+- Unit conversions for recipe standardization
+- Data cleaning and validation
+- Database schema creation with optimized indexes
+
+Key Features:
+- Comprehensive nutrition data (80+ columns per food item)
+- JSON-based aliases storage for vegan ontology
+- Automatic data type conversion and cleaning
+- Database indexing for optimal query performance
+- Error handling and validation reporting
+
+Database Schema:
+- nutrition_facts: Complete nutritional profiles (80+ columns)
+- vegan_ontology: Vegan classification with aliases and context flags
+- unit_conversions: Standardized unit conversion factors
+
+Usage:
+    python scripts/01_ingest_data.py
+
+Dependencies:
+    - polars: High-performance data processing
+    - pandas: Data manipulation and CSV reading
+    - sqlalchemy: Database schema management
+    - loguru: Professional logging
+
+Example:
+    >>> # Run the ingestion script
+    >>> python scripts/01_ingest_data.py
+    >>> # Check the created database
+    >>> import sqlite3
+    >>> conn = sqlite3.connect("nb/src/data/knowledge_graph.db")
+    >>> cursor = conn.execute("SELECT COUNT(*) FROM nutrition_facts")
+    >>> print(f"Loaded {cursor.fetchone()[0]} nutrition records")
+"""
 import polars as pl
 import pandas as pd
 from sqlalchemy import create_engine, text, Table, Column, Integer, String, Float, Boolean, MetaData, JSON

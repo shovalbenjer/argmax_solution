@@ -1,24 +1,81 @@
 """
 DeepEval Pipeline Tests for Function-Calling RAG Architecture
 
-This module tests the new function-calling RAG pipeline components:
-1. FunctionCallingHandler - Converts ingredients to structured JSON queries
-2. QueryEngine - Safely executes JSON queries against the database
-3. ContextAwareDietClassifier - Orchestrates the full pipeline
-4. Final judge model - Makes classifications based on retrieved facts
+This module provides comprehensive testing for the function-calling RAG pipeline
+using the DeepEval framework. It evaluates the complete pipeline from ingredient
+parsing to final classification, ensuring factual consistency and relevancy.
 
-Uses DeepEval framework for comprehensive RAG pipeline evaluation.
+The DeepEval tests cover:
+- Ingredient parsing accuracy and structured extraction
+- Function calling handler query generation quality
+- Query engine safety and execution validation
+- Context retrieval relevancy assessment
+- Classification factual consistency verification
+- End-to-end pipeline coherence testing
+
+Key Test Components:
+1. FunctionCallingHandler: Converts ingredients to structured JSON queries
+2. QueryEngine: Safely executes JSON queries against the database
+3. ContextAwareDietClassifier: Orchestrates the full pipeline
+4. Final judge model: Makes classifications based on retrieved facts
+
+DeepEval Metrics Used:
+- GEval: Custom evaluation criteria for specific tasks
+- ContextualRelevancyMetric: Measures context relevance
+- HallucinationMetric: Detects factual inconsistencies
+- AnswerRelevancyMetric: Assesses answer quality
+
+Test Features:
+- Asynchronous testing for improved performance
+- Comprehensive error handling and logging
+- Mock context generation for controlled testing
+- Factual consistency validation
+- Pipeline coherence verification
+
+Dependencies:
+- pytest: Testing framework
+- deepeval: RAG evaluation framework
+- asyncio: Asynchronous testing support
+- json: Data serialization
+- logging: Test logging and debugging
+
+Example:
+    >>> pytest nb/src/tests/test_deepeval_pipeline.py -v
+    >>> # Run specific DeepEval test
+    >>> pytest nb/src/tests/test_deepeval_pipeline.py::test_ingredient_parser_accuracy -v
 """
 import pytest
 import asyncio
 import json
 import logging
+from pathlib import Path
+from typing import Dict, Any, List
+
+# Try to import deepeval, skip tests if not available
+try:
 from deepeval import assert_test, evaluate
 from deepeval.metrics import GEval, ContextualRelevancyMetric, HallucinationMetric, AnswerRelevancyMetric
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 from deepeval.dataset import EvaluationDataset
-from pathlib import Path
-from typing import Dict, Any, List
+    DEEPEVAL_AVAILABLE = True
+except ImportError:
+    DEEPEVAL_AVAILABLE = False
+    # Create mock classes for when deepeval is not available
+    class MockLLMTestCase:
+        def __init__(self, input=None, actual_output=None, expected_output=None):
+            self.input = input
+            self.actual_output = actual_output
+            self.expected_output = expected_output
+    
+    class MockGEval:
+        def __init__(self, name=None, criteria=None, evaluation_params=None):
+            self.name = name
+            self.criteria = criteria
+            self.evaluation_params = evaluation_params
+    
+    LLMTestCase = MockLLMTestCase
+    GEval = MockGEval
+    assert_test = lambda test_case, metrics: None
 
 # Add nb/src to path for local imports
 import sys
@@ -34,10 +91,33 @@ from ingredient_parser import parse_ingredient
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# Skip all tests if deepeval is not available
+pytestmark = pytest.mark.skipif(not DEEPEVAL_AVAILABLE, reason="DeepEval not available")
+
 # --- Helper Functions for Testing ---
 
 def create_test_context(ingredient_name: str, nutrition_data: Dict = None, vegan_data: Dict = None) -> str:
-    """Create a mock context for testing purposes."""
+    """
+    Create a mock context for testing purposes.
+    
+    This helper function generates mock context data for testing the RAG pipeline
+    components. It creates structured context that mimics the format returned
+    by the actual database queries.
+    
+    Args:
+        ingredient_name (str): Name of the ingredient to create context for
+        nutrition_data (Dict, optional): Mock nutrition data. Defaults to None.
+        vegan_data (Dict, optional): Mock vegan classification data. Defaults to None.
+        
+    Returns:
+        str: JSON-formatted string containing the mock context
+        
+    Example:
+        >>> context = create_test_context("chicken breast", 
+        >>>                              {"calories": 165, "protein": 31},
+        >>>                              {"is_explicitly_non_vegan": True})
+        >>> print(context)
+    """
     context = {
         "ingredient": ingredient_name,
         "nutrition_data": nutrition_data or {"calories": 100, "carbohydrates": 5, "protein": 20},
@@ -49,7 +129,27 @@ def create_test_context(ingredient_name: str, nutrition_data: Dict = None, vegan
 
 @pytest.mark.asyncio
 async def test_ingredient_parser_accuracy():
-    """Tests the accuracy of the ingredient-parser-nlp for structured extraction."""
+    """
+    Tests the accuracy of the ingredient-parser-nlp for structured extraction.
+    
+    This test validates that the ingredient parser can correctly extract
+    structured information from complex ingredient strings. It uses DeepEval's
+    GEval metric to assess parsing accuracy against expected outputs.
+    
+    Test Case:
+        Input: "1 1/2 cups of sifted all-purpose flour, plus more for dusting"
+        Expected: {"name": "all-purpose flour", "quantity": 1.5, "unit": "cup"}
+        
+    The test evaluates:
+    - Ingredient name extraction accuracy
+    - Quantity parsing and conversion
+    - Unit identification and standardization
+    - Handling of complex ingredient descriptions
+    
+    Raises:
+        Exception: If parsing fails or produces unexpected results
+        pytest.fail: If DeepEval evaluation fails
+    """
     
     # Test case: Complex ingredient string
     test_input = "1 1/2 cups of sifted all-purpose flour, plus more for dusting"
@@ -65,19 +165,19 @@ async def test_ingredient_parser_accuracy():
         }
         
         # Define the evaluation metric
-        parser_metric = GEval(
-            name="Parsing Correctness",
+    parser_metric = GEval(
+        name="Parsing Correctness",
             criteria="Evaluate if the 'actual_output' JSON correctly extracts the main ingredient 'name', approximate 'quantity', and 'unit' from the 'input' ingredient string. The name should be the primary ingredient (e.g., 'flour'), quantity should be numeric, and unit should be appropriate.",
-            evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT]
-        )
+        evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT]
+    )
         
-        test_case = LLMTestCase(
+    test_case = LLMTestCase(
             input=test_input,
             actual_output=json.dumps(actual_output),
-            expected_output='{"name": "all-purpose flour", "quantity": 1.5, "unit": "cup"}'
-        )
+        expected_output='{"name": "all-purpose flour", "quantity": 1.5, "unit": "cup"}'
+    )
         
-        assert_test(test_case, [parser_metric])
+    assert_test(test_case, [parser_metric])
         logger.info("Ingredient parser accuracy test passed")
         
     except Exception as e:
@@ -86,7 +186,28 @@ async def test_ingredient_parser_accuracy():
 
 @pytest.mark.asyncio 
 async def test_function_calling_handler_structure():
-    """Tests that FunctionCallingHandler generates well-formed JSON queries."""
+    """
+    Tests that FunctionCallingHandler generates well-formed JSON queries.
+    
+    This test validates that the FunctionCallingHandler can generate properly
+    structured JSON queries from ingredient inputs. It ensures the handler
+    produces valid query structures that can be safely executed by the QueryEngine.
+    
+    Test Case:
+        Input: "shredded sharp cheddar cheese"
+        Expected: JSON with query_type and ingredient_name fields
+        
+    The test evaluates:
+    - JSON structure validity
+    - Required field presence (query_type, ingredient_name)
+    - Query type appropriateness
+    - Ingredient name extraction quality
+    
+    Raises:
+        Exception: If handler fails to generate queries
+        AssertionError: If query structure is invalid
+        pytest.fail: If DeepEval evaluation fails
+    """
     
     handler = FunctionCallingHandler()
     test_ingredient = "shredded sharp cheddar cheese"
@@ -122,7 +243,28 @@ async def test_function_calling_handler_structure():
 
 @pytest.mark.asyncio
 async def test_query_engine_safety_and_execution():
-    """Tests that QueryEngine safely executes structured queries."""
+    """
+    Tests that QueryEngine safely executes structured queries.
+    
+    This test validates the QueryEngine's ability to safely execute structured
+    queries while protecting against SQL injection and other security threats.
+    It tests both safe query execution and malicious query handling.
+    
+    Test Cases:
+        Safe Query: {"query_type": "nutrition", "ingredient_name": "chicken breast"}
+        Unsafe Query: {"query_type": "nutrition", "ingredient_name": "'; DROP TABLE nutrition_facts; --"}
+        
+    The test evaluates:
+    - Safe query execution and result structure
+    - Malicious query detection and handling
+    - SQL injection prevention
+    - Error handling for invalid queries
+    
+    Raises:
+        Exception: If query execution fails unexpectedly
+        AssertionError: If safety measures are not working
+        pytest.fail: If security validation fails
+    """
     
     engine = QueryEngine()
     
@@ -157,7 +299,27 @@ async def test_query_engine_safety_and_execution():
 
 @pytest.mark.asyncio
 async def test_context_retrieval_relevancy():
-    """Tests the relevancy of retrieved factual context."""
+    """
+    Tests the relevancy of retrieved factual context.
+    
+    This test validates that the context retrieval system can provide
+    relevant factual information for ingredient classification. It uses
+    DeepEval's ContextualRelevancyMetric to assess context quality.
+    
+    Test Case:
+        Input: "butter" ingredient
+        Expected: Relevant context about butter's nutritional and dietary properties
+        
+    The test evaluates:
+    - Context retrieval functionality
+    - Context relevance to classification task
+    - Factual accuracy of retrieved information
+    - Context completeness and usefulness
+    
+    Raises:
+        Exception: If context retrieval fails
+        pytest.fail: If relevancy evaluation fails
+    """
     
     classifier = ContextAwareDietClassifier()
     test_ingredient = "butter"
@@ -170,12 +332,12 @@ async def test_context_retrieval_relevancy():
             retrieved_context = context_result["context"]
             
             relevancy_metric = ContextualRelevancyMetric(threshold=0.7)
-            test_case = LLMTestCase(
+    test_case = LLMTestCase(
                 input=f"Is {test_ingredient} vegan?",
                 retrieval_context=[json.dumps(retrieved_context)]
-            )
+    )
             
-            assert_test(test_case, [relevancy_metric])
+    assert_test(test_case, [relevancy_metric])
             logger.info("Context retrieval relevancy test passed")
         else:
             logger.warning("No context retrieved for butter - may indicate database issue")
@@ -186,7 +348,27 @@ async def test_context_retrieval_relevancy():
 
 @pytest.mark.asyncio
 async def test_classification_factual_consistency():
-    """Tests that final classifications are factually consistent with retrieved context."""
+    """
+    Tests that final classifications are factually consistent with retrieved context.
+    
+    This test validates that the final classification results are factually
+    consistent with the retrieved context and known dietary facts. It uses
+    DeepEval's HallucinationMetric to detect factual inconsistencies.
+    
+    Test Case:
+        Input: ["chicken breast", "olive oil", "salt"]
+        Expected: is_vegan=False, is_keto=True (chicken is not vegan but is keto-friendly)
+        
+    The test evaluates:
+    - Factual consistency of classifications
+    - Reasoning quality and accuracy
+    - Absence of hallucinations or false claims
+    - Alignment with known dietary facts
+    
+    Raises:
+        Exception: If classification fails
+        pytest.fail: If factual consistency evaluation fails
+    """
     
     classifier = ContextAwareDietClassifier()
     
@@ -211,15 +393,15 @@ async def test_classification_factual_consistency():
         )
         
         # Define metrics
-        factual_consistency_metric = GEval(
-            name="Factual Consistency",
+    factual_consistency_metric = GEval(
+        name="Factual Consistency",
             criteria="Based on the 'retrieval_context', is the classification in 'actual_output' factually correct? Chicken breast is not vegan but is keto-friendly.",
             evaluation_params=[LLMTestCaseParams.ACTUAL_OUTPUT, LLMTestCaseParams.RETRIEVAL_CONTEXT]
-        )
+    )
         
         hallucination_metric = HallucinationMetric(threshold=0.0)
-        
-        test_case = LLMTestCase(
+    
+    test_case = LLMTestCase(
             input=f"Classify recipe with ingredients: {', '.join(test_ingredients)}",
             actual_output=json.dumps(actual_output),
             retrieval_context=[mock_context],
@@ -235,7 +417,27 @@ async def test_classification_factual_consistency():
 
 @pytest.mark.asyncio
 async def test_end_to_end_pipeline_coherence():
-    """Tests the full pipeline from ingredient parsing to final classification."""
+    """
+    Tests the full pipeline from ingredient parsing to final classification.
+    
+    This test validates the complete end-to-end pipeline coherence, ensuring
+    that all components work together seamlessly from ingredient input to
+    final classification output. It tests the entire RAG pipeline workflow.
+    
+    Test Case:
+        Input: ["1 cup almond flour", "2 tbsp coconut oil", "1 egg"]
+        Expected: is_vegan=False (contains egg), is_keto=True (low carb ingredients)
+        
+    The test evaluates:
+    - Complete pipeline functionality
+    - Logical coherence of final classifications
+    - Integration between all pipeline components
+    - End-to-end workflow reliability
+    
+    Raises:
+        Exception: If pipeline execution fails
+        pytest.fail: If coherence evaluation fails
+    """
     
     classifier = ContextAwareDietClassifier()
     
@@ -257,8 +459,8 @@ async def test_end_to_end_pipeline_coherence():
         )
         
         answer_relevancy_metric = AnswerRelevancyMetric(threshold=0.8)
-        
-        test_case = LLMTestCase(
+
+    test_case = LLMTestCase(
             input=f"Recipe with: {', '.join(test_recipe['ingredients'])}",
             actual_output=json.dumps(result),
             expected_output=f'{{"is_vegan": {str(test_recipe["expected_vegan"]).lower()}, "is_keto": {str(test_recipe["expected_keto"]).lower()}}}'

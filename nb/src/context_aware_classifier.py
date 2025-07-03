@@ -1,14 +1,48 @@
 """
 Context-Aware Diet Classifier - SOTA Semantic Architecture
 
+This module implements a state-of-the-art context-aware diet classification system
+that combines multiple advanced techniques for accurate ingredient and recipe
+classification. The system uses a sophisticated pipeline that leverages semantic
+search, fuzzy matching, and machine learning for robust dietary classification.
+
 PIPELINE: Recipe Ingredient → ingredient-parser → Arctic Semantic SQL → Database → Fuzzy Fallback → Qwen
 
 Key Features:
-1. ingredient-parser: Extracts clean ingredient names from recipe strings
+1. ingredient-parser: Extracts clean ingredient names from recipe strings with 97.8% accuracy
 2. Arctic Text2SQL: Generates semantic LIKE queries for flexible matching  
 3. Fuzzy fallback: RapidFuzz for when semantic queries fail
 4. Dual-database: nutrition_facts (keto) + vegan_ontology (vegan)
 5. Edge case handling: Compound foods, synonyms, processing variations
+6. Caching system: Redis-based caching for improved performance
+7. Performance monitoring: Comprehensive metrics and statistics
+
+Architecture Components:
+- SOTASemanticClassifier: Main classification engine
+- Semantic SQL generation: Context-aware database queries
+- Fuzzy matching fallback: Robust ingredient matching
+- Caching layer: Performance optimization
+- Performance tracking: Metrics and monitoring
+
+Supported Classifications:
+- Keto diet compatibility
+- Vegan diet compatibility
+- Individual ingredient analysis
+- Full recipe classification
+- Confidence scoring and reasoning
+
+Dependencies:
+- sqlite3: Database connectivity
+- asyncio: Asynchronous processing
+- polars: High-performance data processing
+- ingredient-parser: Professional ingredient extraction
+- RapidFuzz: Fuzzy string matching
+- Redis: Caching system
+
+Example:
+    >>> classifier = SOTASemanticClassifier()
+    >>> result = await classifier.classify_single_ingredient("chicken breast")
+    >>> print(f"Keto: {result['is_keto']}, Vegan: {result['is_vegan']}")
 """
 import sqlite3
 import json
@@ -40,8 +74,47 @@ except ImportError:
 # Configure professional logging
 logger = logging.getLogger(__name__)
 
+def truncate_text_by_tokens(text: str, max_tokens: int) -> str:
+    """
+    Truncates text to approximately max_tokens. Assumes ~4 chars/token for simplicity.
+    This is a rough estimation for quick truncation without a full tokenizer.
+    """
+    if not text:
+        return ""
+    # Estimate token count (simple char count / 4)
+    estimated_tokens = len(text) / 4
+    if estimated_tokens > max_tokens:
+        # Truncate to desired character count based on token estimate
+        truncate_len = int(max_tokens * 4) # Multiply by 4 chars/token
+        truncated_text = text[:truncate_len] + "... [TRUNCATED]"
+        logger.warning(f"Context truncated from ~{int(estimated_tokens)} to ~{max_tokens} tokens.")
+        return truncated_text
+    return text
+
 def execute_sql_query(sql: str, params: List[Any]) -> str:
-    """Executes a SQL query with parameters and returns the formatted results."""
+    """
+    Executes a SQL query with parameters and returns the formatted results.
+    
+    This function provides a safe and efficient way to execute SQL queries
+    against the classification database. It handles connection management,
+    parameter binding, and result formatting.
+    
+    Args:
+        sql (str): SQL query string with parameter placeholders
+        params (List[Any]): List of parameters to bind to the query
+        
+    Returns:
+        str: JSON-formatted string containing query results or error message
+        
+    Raises:
+        Exception: If database connection or query execution fails
+        
+    Example:
+        >>> sql = "SELECT * FROM nutrition_facts WHERE name LIKE ?"
+        >>> params = ["%chicken%"]
+        >>> result = execute_sql_query(sql, params)
+        >>> print(result)
+    """
     try:
         with db_manager.get_sqlite_connection() as conn:
             df = pl.read_database(query=sql, connection=conn, execute_options={"parameters": params})
@@ -58,14 +131,55 @@ def execute_sql_query(sql: str, params: List[Any]) -> str:
 
 class SOTASemanticClassifier:
     """
-    State-of-the-Art semantic diet classifier using the complete pipeline:
+    State-of-the-Art semantic diet classifier using the complete pipeline.
     
-    Recipe → ingredient-parser → Arctic semantic SQL → Database → Fuzzy fallback → Qwen
+    This class implements a sophisticated diet classification system that combines
+    multiple advanced techniques for accurate ingredient and recipe classification.
+    The pipeline uses semantic search, fuzzy matching, and machine learning for
+    robust dietary classification.
     
-    This solves the exact matching problem while maintaining high precision.
+    Pipeline: Recipe → ingredient-parser → Arctic semantic SQL → Database → Fuzzy fallback → Qwen
+    
+    Key Features:
+    - Professional ingredient parsing with 97.8% accuracy
+    - Semantic SQL generation for flexible database queries
+    - Fuzzy matching fallback for robust ingredient matching
+    - Dual-database architecture (nutrition_facts + vegan_ontology)
+    - Comprehensive caching system for performance optimization
+    - Performance monitoring and statistics tracking
+    - Edge case handling for compound foods and synonyms
+        
+    Attributes:
+        llm_client (LLMClient): Client for LLM interactions
+        function_handler (FunctionCallingHandler): Handler for function calling
+        cache_manager: Redis-based caching system
+        cache_hits (int): Number of cache hits for performance tracking
+        cache_misses (int): Number of cache misses for performance tracking
+        total_requests (int): Total number of classification requests
+        
+    Example:
+        >>> classifier = SOTASemanticClassifier()
+        >>> result = await classifier.classify_single_ingredient("chicken breast")
+        >>> print(f"Classification: {result}")
     """
     
     def __init__(self):
+        """
+        Initialize the SOTA semantic classifier with all required components.
+        
+        This constructor sets up the complete classification pipeline including
+        the LLM client, function handler, cache manager, and performance tracking.
+        
+        Initializes:
+        - LLM client for semantic query generation
+        - Function calling handler for structured queries
+        - Cache manager for performance optimization
+        - Performance tracking metrics
+        
+        Example:
+            >>> classifier = SOTASemanticClassifier()
+            >>> # Ready for classification operations
+        """
         self.llm_client = LLMClient()
         self.function_handler = FunctionCallingHandler()
         self.cache_manager = get_cache_manager()
@@ -77,12 +191,29 @@ class SOTASemanticClassifier:
         
     def extract_ingredient_name(self, raw_ingredient: str) -> str:
         """
-        Extract clean ingredient name using ingredient-parser (97.8% accuracy).
+        Extract clean ingredient name using ingredient-parser with fallback.
         
+        This method uses the professional ingredient-parser library to extract
+        clean ingredient names from complex recipe strings. It falls back to
+        basic regex cleaning if the parser is unavailable.
+        
+        Args:
+            raw_ingredient (str): Raw ingredient string from recipe
+            
+        Returns:
+            str: Cleaned ingredient name suitable for database lookup
+            
         Examples:
-        - "3 pounds pork shoulder, cut into chunks" → "pork shoulder"
-        - "2 tbsp extra virgin olive oil" → "olive oil" 
-        - "1 cup diced tomatoes" → "tomatoes"
+            >>> extract_ingredient_name("3 pounds pork shoulder, cut into chunks")
+            "pork shoulder"
+            >>> extract_ingredient_name("2 tbsp extra virgin olive oil")
+            "olive oil"
+            >>> extract_ingredient_name("1 cup diced tomatoes")
+            "tomatoes"
+            
+        Note:
+            Uses ingredient-parser with 97.8% accuracy when available,
+            falls back to regex-based cleaning when not available.
         """
         if INGREDIENT_PARSER_AVAILABLE:
             try:
@@ -109,8 +240,28 @@ class SOTASemanticClassifier:
         """
         Arctic-powered semantic search for keto classification.
         
-        Uses LIKE queries to find nutritionally similar ingredients,
-        prioritizing raw/unprocessed forms.
+        This method uses the Arctic LLM to generate semantic SQL queries for
+        finding nutritionally similar ingredients in the database. It prioritizes
+        raw/unprocessed forms and uses LIKE queries for flexible matching.
+        
+        Args:
+            ingredient (str): Ingredient to search for keto classification
+            
+        Returns:
+            str: JSON-formatted string containing nutritional data for keto assessment
+            
+        Strategy:
+            1. Use LIKE operators with wildcards for flexible matching
+            2. Prioritize raw, unprocessed forms (look for 'raw', 'fresh', 'uncooked')
+            3. Avoid compound/processed foods (souffle, casserole, prepared dishes)
+            4. Include variant forms and preparations that maintain base nutrition
+            
+        Raises:
+            Exception: If semantic query generation or execution fails
+            
+        Example:
+            >>> context = await classifier._get_semantic_keto_context("chicken breast")
+            >>> print(context)  # JSON with nutritional data
         """
         clean_ingredient = self.extract_ingredient_name(ingredient)
         
@@ -145,7 +296,28 @@ Return nutritional data focusing on: carbohydrate_g, fiber_g, protein_g, total_f
         """
         Arctic-powered semantic search for vegan classification.
         
-        Searches vegan ontology for animal product detection using semantic matching.
+        This method uses the Arctic LLM to generate semantic SQL queries for
+        finding animal product information in the vegan ontology database.
+        It searches for flexible matches including synonyms and regional names.
+        
+        Args:
+            ingredient (str): Ingredient to search for vegan classification
+            
+        Returns:
+            str: JSON-formatted string containing vegan classification data
+            
+        Strategy:
+            1. Check 'term' column with LIKE '%ingredient%' for flexible matching
+            2. Search 'aliases' column for alternative names (synonyms, regional names)
+            3. Look for parent categories (e.g., 'milk' matches 'whole milk', 'skim milk')
+            4. Return 'is_explicitly_non_vegan' flag and 'description' for animal origin info
+            
+        Raises:
+            Exception: If semantic query generation or execution fails
+            
+        Example:
+            >>> context = await classifier._get_semantic_vegan_context("milk")
+            >>> print(context)  # JSON with vegan classification data
         """
         clean_ingredient = self.extract_ingredient_name(ingredient)
         
@@ -180,7 +352,28 @@ Find any matches that indicate animal product status."""
         """
         Fuzzy matching fallback when Arctic semantic search fails.
         
-        Uses the existing processor's RapidFuzz implementation for backup.
+        This method provides a robust fallback mechanism using RapidFuzz for
+        fuzzy string matching when semantic queries fail or return no results.
+        It ensures the system can handle edge cases and variations in ingredient names.
+        
+        Args:
+            ingredient (str): Ingredient to search for
+            context_type (str): Type of context to retrieve ("nutrition" or "vegan")
+            
+        Returns:
+            str: JSON-formatted string containing context data or empty result
+            
+        Strategy:
+            - Uses existing processor for comprehensive fuzzy matching
+            - Falls back to fuzzy matches if direct lookup fails
+            - Provides graceful degradation when semantic search fails
+            
+        Raises:
+            Exception: If fuzzy matching fails unexpectedly
+            
+        Example:
+            >>> context = await classifier._get_fuzzy_fallback_context("chicken", "nutrition")
+            >>> print(context)  # JSON with nutritional data or empty result
         """
         logger.info(f"Using fuzzy fallback for {context_type} context: {ingredient}")
         
@@ -201,7 +394,7 @@ Find any matches that indicate animal product status."""
                     if context_type == "nutrition":
                         fallback_data = processor.get_nutrition_data(best_match)
                         return json.dumps([fallback_data] if fallback_data else [], indent=2)
-                    else:
+        else:
                         fallback_data = processor.get_vegan_info(best_match)
                         return json.dumps([fallback_data] if fallback_data else [], indent=2)
                         
@@ -283,7 +476,11 @@ Find any matches that indicate animal product status."""
             self._get_semantic_vegan_context(ingredient)
         )
 
-        # Step 4: Enhanced Qwen reasoning with SOTA prompting
+        # Step 4: Truncate contexts if they exceed the token limit
+        keto_context = truncate_text_by_tokens(keto_context, app_config.QWEN_MAX_CONTEXT_TOKENS)
+        vegan_context = truncate_text_by_tokens(vegan_context, app_config.QWEN_MAX_CONTEXT_TOKENS)
+
+        # Step 5: Enhanced Qwen reasoning with SOTA prompting
         prompt = f"""You are an expert nutrition classifier using SOTA semantic search results.
 
 **ORIGINAL INGREDIENT:** {ingredient}
@@ -338,7 +535,7 @@ Find any matches that indicate animal product status."""
 
         result = await self.llm_client.query_async(model_name, prompt, as_json=True)
         
-        # Step 5: Cache the result for future use
+        # Step 6: Cache the result for future use
         if "error" not in result:
             await self._cache_ingredient_classification(ingredient, result)
         

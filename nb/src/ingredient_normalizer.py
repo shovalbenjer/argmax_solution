@@ -1,8 +1,44 @@
 """
-Ingredient Normalizer for Consistent Caching
+Ingredient Normalizer for Consistent Caching and Lookup
 
 This module provides deterministic ingredient normalization using the
-ingredient-parser-nlp library to ensure consistent cache keys.
+ingredient-parser-nlp library to ensure consistent cache keys and reliable
+ingredient matching across the diet classification system.
+
+The normalizer handles:
+- Ingredient name extraction and cleaning
+- Quantity and unit removal
+- Preparation term normalization
+- Plural form handling
+- Cache key generation
+- Fallback normalization when parser unavailable
+
+Key Features:
+- Professional ingredient parsing with 97.8% accuracy
+- Consistent normalization for caching
+- Fallback regex-based normalization
+- Comprehensive unit and preparation term handling
+- Plural form standardization
+- Cache key generation for Redis
+
+Supported Normalizations:
+- Quantity removal: "100g chicken breast" → "chicken_breast"
+- Unit removal: "1 cup olive oil" → "olive_oil"
+- Preparation term removal: "chopped onions" → "onion"
+- Plural handling: "tomatoes" → "tomato"
+- Cache key generation: "chicken_breast" → "ingredient:chicken_breast"
+
+Dependencies:
+- ingredient-parser: Professional ingredient parsing (optional)
+- re: Regular expression processing
+- logging: Debug and error logging
+
+Example:
+    >>> from ingredient_normalizer import normalizer
+    >>> normalized = normalizer.normalize_ingredient("100g chicken breast")
+    >>> print(normalized)  # "chicken_breast"
+    >>> cache_key = normalizer.get_cache_key("100g chicken breast")
+    >>> print(cache_key)  # "ingredient:chicken_breast"
 """
 
 import re
@@ -22,10 +58,47 @@ except ImportError:
 class IngredientNormalizer:
     """
     Normalizes ingredient strings for consistent caching and lookup.
-    Uses ingredient-parser-nlp when available, falls back to regex-based normalization.
+    
+    This class provides comprehensive ingredient normalization capabilities
+    using the ingredient-parser-nlp library when available, with robust
+    fallback to regex-based normalization. It ensures consistent ingredient
+    representation across the classification system.
+    
+    Key Features:
+    - Professional ingredient parsing with high accuracy
+    - Consistent normalization for caching systems
+    - Comprehensive unit and preparation term handling
+    - Plural form standardization
+    - Cache key generation for Redis storage
+    - Fallback normalization for edge cases
+        
+    Attributes:
+        common_units (set): Set of common measurement units to remove
+        preparation_terms (set): Set of preparation terms to normalize
+        
+    Example:
+        >>> normalizer = IngredientNormalizer()
+        >>> result = normalizer.normalize_ingredient("100g chicken breast")
+        >>> print(result)  # "chicken_breast"
     """
     
     def __init__(self):
+        """
+        Initialize the ingredient normalizer with unit and preparation term sets.
+        
+        This constructor sets up the comprehensive sets of measurement units
+        and preparation terms that will be normalized during ingredient processing.
+        
+        Initializes:
+        - Volume units: cup, tablespoon, teaspoon, etc.
+        - Weight units: pound, ounce, gram, etc.
+        - Count units: piece, slice, clove, etc.
+        - Preparation terms: chopped, diced, cooked, etc.
+        
+        Example:
+            >>> normalizer = IngredientNormalizer()
+            >>> # Ready for ingredient normalization
+        """
         self.common_units = {
             # Volume
             'cup', 'cups', 'c', 'tablespoon', 'tablespoons', 'tbsp', 'tbs', 'tb',
@@ -50,10 +123,31 @@ class IngredientNormalizer:
         """
         Normalizes an ingredient string to a consistent format for caching.
         
+        This method provides comprehensive ingredient normalization using
+        the ingredient-parser-nlp library when available, with robust
+        fallback to regex-based normalization. It removes quantities,
+        units, and preparation terms to create consistent ingredient names.
+        
+        Args:
+            ingredient_text (str): Raw ingredient string to normalize
+            
+        Returns:
+            str: Normalized ingredient name suitable for caching and lookup
+            
         Examples:
-        - "100g chicken breast" -> "chicken_breast"
-        - "1 cup of olive oil" -> "olive_oil"
-        - "2 medium eggs" -> "egg"
+            >>> normalizer = IngredientNormalizer()
+            >>> normalizer.normalize_ingredient("100g chicken breast")
+            "chicken_breast"
+            >>> normalizer.normalize_ingredient("1 cup of olive oil")
+            "olive_oil"
+            >>> normalizer.normalize_ingredient("2 medium eggs")
+            "egg"
+            >>> normalizer.normalize_ingredient("chopped onions")
+            "onion"
+            
+        Note:
+            Uses ingredient-parser-nlp when available for high accuracy,
+            falls back to regex-based normalization when parser unavailable.
         """
         if not ingredient_text or not ingredient_text.strip():
             return ""
@@ -71,7 +165,31 @@ class IngredientNormalizer:
         return self._fallback_normalize(ingredient_text)
     
     def _clean_ingredient_name(self, name: str) -> str:
-        """Clean and standardize the ingredient name."""
+        """
+        Clean and standardize the ingredient name from parser output.
+        
+        This method processes the output from ingredient-parser-nlp to
+        create a clean, normalized ingredient name suitable for caching
+        and lookup operations.
+        
+        Args:
+            name (str): Raw ingredient name from parser
+            
+        Returns:
+            str: Cleaned and normalized ingredient name
+            
+        Processing Steps:
+            1. Convert to lowercase and strip whitespace
+            2. Remove preparation terms (chopped, diced, etc.)
+            3. Remove punctuation and special characters
+            4. Replace spaces with underscores
+            5. Handle plural forms (simple approach)
+            
+        Example:
+            >>> normalizer = IngredientNormalizer()
+            >>> result = normalizer._clean_ingredient_name("Chicken Breast")
+            >>> print(result)  # "chicken_breast"
+        """
         if not name:
             return ""
         
@@ -96,7 +214,31 @@ class IngredientNormalizer:
         return name
     
     def _fallback_normalize(self, ingredient_text: str) -> str:
-        """Fallback normalization using regex patterns."""
+        """
+        Fallback normalization using regex patterns when parser unavailable.
+        
+        This method provides robust ingredient normalization using regex
+        patterns when the ingredient-parser-nlp library is not available.
+        It handles quantities, units, and preparation terms comprehensively.
+        
+        Args:
+            ingredient_text (str): Raw ingredient string to normalize
+            
+        Returns:
+            str: Normalized ingredient name using regex patterns
+            
+        Processing Steps:
+            1. Remove quantities and measurement units
+            2. Remove common quantity words (of, a, an, the)
+            3. Remove preparation terms
+            4. Clean punctuation and normalize spacing
+            5. Handle plural forms
+            
+        Example:
+            >>> normalizer = IngredientNormalizer()
+            >>> result = normalizer._fallback_normalize("100g chicken breast")
+            >>> print(result)  # "chicken_breast"
+        """
         text = ingredient_text.lower().strip()
         
         # Remove quantities and units
@@ -126,7 +268,29 @@ class IngredientNormalizer:
     def get_cache_key(self, ingredient_text: str) -> str:
         """
         Generate a cache key for the ingredient.
-        Returns a normalized string suitable for use as a Redis key.
+        
+        This method creates a Redis-compatible cache key for the given
+        ingredient by normalizing the ingredient name and prefixing it
+        with "ingredient:" for namespace separation.
+        
+        Args:
+            ingredient_text (str): Raw ingredient string
+            
+        Returns:
+            str: Redis-compatible cache key for the ingredient
+            
+        Key Format:
+            "ingredient:{normalized_name}"
+            
+        Examples:
+            >>> normalizer = IngredientNormalizer()
+            >>> key = normalizer.get_cache_key("100g chicken breast")
+            >>> print(key)  # "ingredient:chicken_breast"
+            >>> key = normalizer.get_cache_key("1 cup olive oil")
+            >>> print(key)  # "ingredient:olive_oil"
+            
+        Note:
+            Provides fallback key generation for empty normalization results.
         """
         normalized = self.normalize_ingredient(ingredient_text)
         if not normalized:

@@ -49,7 +49,7 @@ async def test_single_ingredients():
         }
     ]
     
-    print("🧪 TESTING SOTA SEMANTIC CLASSIFIER")
+    print("TESTING SOTA SEMANTIC CLASSIFIER")
     print("=" * 60)
     
     results = []
@@ -76,18 +76,18 @@ async def test_single_ingredients():
         
         # Check for errors
         if "error" in result:
-            print(f"❌ ERROR: {result['error']}")
+            print(f"ERROR: {result['error']}")
             results.append({"ingredient": ingredient, "status": "error", "error": result["error"]})
             continue
         
         # Display results
-        print(f"📝 Extracted: '{ingredient}' → '{extracted_name}'")
-        print(f"🥩 Keto: {is_keto} (expected: {test_case['expected_keto']})")
-        print(f"🌱 Vegan: {is_vegan} (expected: {test_case['expected_vegan']})")
-        print(f"🎯 Confidence: {confidence}")
-        print(f"🔍 Semantic Quality: {semantic_quality}")
-        print(f"⏱️  Time: {classification_time:.2f}s")
-        print(f"💭 Reasoning: {reasoning}")
+        print(f"Extracted: '{ingredient}' → '{extracted_name}'")
+        print(f"Keto: {is_keto} (expected: {test_case['expected_keto']})")
+        print(f"Vegan: {is_vegan} (expected: {test_case['expected_vegan']})")
+        print(f"Confidence: {confidence}")
+        print(f"Semantic Quality: {semantic_quality}")
+        print(f"Time: {classification_time:.2f}s")
+        print(f"Reasoning: {reasoning}")
         
         # Check accuracy
         keto_correct = is_keto == test_case["expected_keto"]
@@ -114,7 +114,7 @@ async def test_single_ingredients():
     
     # Summary statistics
     print("\n" + "=" * 60)
-    print("📊 SUMMARY STATISTICS")
+    print("SUMMARY STATISTICS")
     print("=" * 60)
     
     correct_count = len([r for r in results if r.get("status") == "correct"])
@@ -125,9 +125,9 @@ async def test_single_ingredients():
         accuracy = (correct_count / total_count) * 100
         avg_time = total_time / total_count
         
-        print(f"🎯 Accuracy: {correct_count}/{total_count} ({accuracy:.1f}%)")
-        print(f"⏱️  Average Time: {avg_time:.2f}s per ingredient")
-        print(f"❌ Errors: {error_count}")
+        print(f"Accuracy: {correct_count}/{total_count} ({accuracy:.1f}%)")
+        print(f"Time: {avg_time:.2f}s per ingredient")
+        print(f"Errors: {error_count}")
         
         # Semantic quality distribution
         quality_dist = {}
@@ -136,10 +136,10 @@ async def test_single_ingredients():
                 quality = r["semantic_quality"]
                 quality_dist[quality] = quality_dist.get(quality, 0) + 1
         
-        print(f"🔍 Semantic Quality: {quality_dist}")
+        print(f"Semantic Quality: {quality_dist}")
     
     # Performance stats
-    print(f"\n📈 CLASSIFIER PERFORMANCE:")
+    print(f"\nCLASSIFIER PERFORMANCE:")
     stats = classifier.get_performance_stats()
     print(f"   Cache available: {stats['cache_available']}")
     print(f"   ingredient-parser available: {stats['ingredient_parser_available']}")
@@ -175,7 +175,7 @@ async def test_recipe_classification():
     result = await classifier.classify_recipe(recipe)
     end_time = time.time()
     
-    print(f"\n📊 RECIPE RESULTS:")
+    print(f"\nRECIPE RESULTS:")
     print(f"  🥩 Keto-friendly: {result['recipe_is_keto']}")
     print(f"  🌱 Vegan-friendly: {result['recipe_is_vegan']}")
     print(f"  📝 Ingredients processed: {result['successful_classifications']}/{result['ingredient_count']}")
@@ -223,11 +223,11 @@ async def test_basic_functionality():
             end_time = time.time()
             
             if "error" in result:
-                print(f"❌ Error: {result['error']}")
+                print(f"ERROR: {result['error']}")
             else:
-                print(f"✅ Keto: {result.get('is_keto', 'unknown')}")
-                print(f"✅ Vegan: {result.get('is_vegan', 'unknown')}")
-                print(f"⏱️  Time: {end_time - start_time:.2f}s")
+                print(f"SUCCESS Keto: {result.get('is_keto', 'unknown')}")
+                print(f"SUCCESS Vegan: {result.get('is_vegan', 'unknown')}")
+                print(f"Time: {end_time - start_time:.2f}s")
                 
         except Exception as e:
             print(f"❌ Exception: {e}")

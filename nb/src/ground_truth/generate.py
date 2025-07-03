@@ -1,27 +1,30 @@
-"""SOTA Diet Classifier - Ground Truth Generation.
+#!/usr/bin/env python3
+"""
+Ground Truth Generation for Diet Classification
 
-This script generates ground truth data for diet classification.
-It uses specialized Vegan and Keto classifiers with Chain-of-Thought and Self-Critique prompting.
-Results from both stages are merged into a comprehensive output file.
+This script generates high-quality ground truth data for diet classification
+by using multiple AI models to classify recipes as vegan and keto-friendly.
 """
 
-import os
-import polars as pl
-import json
-import time
-import re
-import logging
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Callable
 import asyncio
-import mlflow
-from loguru import logger
-from tqdm import tqdm
-from tqdm.asyncio import tqdm_asyncio
-from opensearchpy import OpenSearch
-from dotenv import load_dotenv
+import json
+import logging
+import os
+import sys
+import time
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
-# Google Generative AI imports
+# Add the parent directory to Python path for imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import polars as pd
+import polars as pl
+from dotenv import load_dotenv
+from opensearchpy import OpenSearch
+from tqdm import tqdm
+
+# --- External API Imports ---
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
@@ -89,7 +92,7 @@ class AsyncTokenBucket:
             time_to_wait_tpm = 60 - (now - self.last_reset_time) if self.tokens_this_minute + estimated_tokens > self.tpm_rate else 0.0
             time_to_wait = max(time_to_wait_rpm, time_to_wait_tpm)
             if time_to_wait > 0.1:
-                logger.warning(f"Rate limit nearing. Pausing for {time_to_wait:.2f}s...")
+                logging.warning(f"Rate limit nearing. Pausing for {time_to_wait:.2f}s...")
                 await asyncio.sleep(time_to_wait)
                 self.last_reset_time = time.time()
                 self.requests_this_minute = 0
@@ -339,23 +342,23 @@ async def run_classification_stage(df: pl.DataFrame, prompt_builder: Callable, s
 
 def wait_for_index(client: OpenSearch, index_name: str, max_retries: int = 20, retry_interval: int = 10) -> bool:
     """Waits for a specific OpenSearch index to exist."""
-    logger.info(f"Waiting for OpenSearch index '{index_name}' to be created...")
+    logging.info(f"Waiting for OpenSearch index '{index_name}' to be created...")
     for i in range(max_retries):
         try:
             if client.indices.exists(index=index_name):
-                logger.success(f"Index '{index_name}' found.")
+                logging.info(f"Index '{index_name}' found.")
                 return True
         except Exception as e:
-            logger.warning(f"Error checking for index: {e}")
-        logger.info(f"Retrying in {retry_interval} seconds... (attempt {i+1}/{max_retries})")
+            logging.warning(f"Error checking for index: {e}")
+        logging.info(f"Retrying in {retry_interval} seconds... (attempt {i+1}/{max_retries})")
         time.sleep(retry_interval)
-    logger.error(f"Index '{index_name}' not found after maximum retries.")
+    logging.error(f"Index '{index_name}' not found after maximum retries.")
     return False
 
 
 def fetch_recipes_synchronously(os_client: OpenSearch) -> List[Dict]:
     """Fetches a random sample of recipes using the synchronous client."""
-    logger.info(f"Fetching {CONFIG['SAMPLE_SIZE']} random recipes from OpenSearch...")
+    logging.info(f"Fetching {CONFIG['SAMPLE_SIZE']} random recipes from OpenSearch...")
     query = {"size": CONFIG["SAMPLE_SIZE"], "query": {"function_score": {"functions": [{"random_score": {}}]}}}
     response = os_client.search(index="recipes", body=query)
     return response['hits']['hits']
@@ -397,7 +400,7 @@ async def classify_batch(batch: List[Dict], classifier: ContextAwareDietClassifi
         return results
         
     except Exception as e:
-        logger.error(f"Batch classification failed: {e}")
+        logging.error(f"Batch classification failed: {e}")
         return []
 
 
@@ -418,12 +421,12 @@ async def classify_and_log_async(processed_recipes: List[Dict]):
 
     # MLflow Logging & Saving
     if not all_results:
-        logger.error("Classification failed for all batches. No data to save.")
+        logging.error("Classification failed for all batches. No data to save.")
         return
 
     mlflow.set_tracking_uri(CONFIG["MLFLOW_TRACKING_URI"])
     with mlflow.start_run(run_name="SOTA Personas Ground Truth Generation") as run:
-        logger.info(f"MLflow run started: {run.info.run_id}")
+        logging.info(f"MLflow run started: {run.info.run_id}")
         mlflow.log_params(CONFIG)
         
         final_data = []
@@ -444,19 +447,19 @@ async def classify_and_log_async(processed_recipes: List[Dict]):
             output_path = CONFIG["OUTPUT_DIR"] / CONFIG["GROUND_TRUTH_FILENAME"]
             final_df.write_csv(output_path)
             mlflow.log_artifact(str(output_path), "generated_datasets")
-            logger.success(f"Ground truth generation complete. Saved to {output_path}")
+            logging.info(f"Ground truth generation complete. Saved to {output_path}")
         else:
-            logger.warning("No results were generated. Skipping artifact logging.")
+            logging.warning("No results were generated. Skipping artifact logging.")
 
 
 def main():
     """Main execution block, orchestrating synchronous and asynchronous parts."""
-    logger.info("🚀 Starting SOTA Personas Ground Truth Generation Pipeline...")
+    logging.info("Starting SOTA Personas Ground Truth Generation Pipeline...")
 
     # Connect, Wait, and Fetch Data
     os_client = OpenSearch(hosts=[CONFIG["OPENSEARCH_URL"]])
     if not os_client.ping() or not wait_for_index(os_client, "recipes"):
-        logger.error("OpenSearch is not available. Exiting.")
+        logging.error("OpenSearch is not available. Exiting.")
         return
 
     recipes_hits = fetch_recipes_synchronously(os_client)
@@ -482,16 +485,16 @@ def main():
             
             output_path = CONFIG["OUTPUT_DIR"] / CONFIG["GROUND_TRUTH_FILENAME"]
             final_df.write_csv(output_path)
-            logger.success(f"✅ Ground truth generation complete. Saved to {output_path}")
+            logging.info(f"Ground truth generation complete. Saved to {output_path}")
 
             # MLflow Logging
             mlflow.set_tracking_uri(CONFIG["MLFLOW_TRACKING_URI"])
             with mlflow.start_run(run_name="SOTA Personas Ground Truth Generation") as run:
-                logger.info(f"MLflow run started: {run.info.run_id}")
+                logging.info(f"MLflow run started: {run.info.run_id}")
                 mlflow.log_params(CONFIG)
                 mlflow.log_artifact(str(output_path), "generated_datasets")
         else:
-            logger.error("Classification stages failed. No data to save.")
+            logging.error("Classification stages failed. No data to save.")
 
     # Run the async stages
     asyncio.run(run_stages())
@@ -500,5 +503,4 @@ def main():
 if __name__ == "__main__":
     logging.basicConfig(level=CONFIG["LOG_LEVEL"], format='%(asctime)s - %(levelname)s - %(message)s', force=True)
     CONFIG["OUTPUT_DIR"].mkdir(parents=True, exist_ok=True)
-    logger.add(CONFIG["OUTPUT_DIR"] / "personas_generation.log", rotation="10 MB")
     main() 

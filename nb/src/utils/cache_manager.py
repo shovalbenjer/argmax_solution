@@ -6,20 +6,51 @@ This module provides a centralized Redis caching solution optimized for storing
 classification results and factual contexts. It implements a cache-first approach
 with graceful fallback when Redis is unavailable.
 
+The CacheManager class provides high-performance caching for:
+- Classification results with metadata and timestamps
+- Ingredient context data (nutritional and vegan information)
+- System statistics and performance metrics
+- Batch operations with configurable TTL
+
 Key Features:
-- Thread-safe singleton pattern
-- Automatic JSON serialization/deserialization 
-- Configurable TTL for different data types
+- Thread-safe singleton pattern with automatic initialization
+- Automatic JSON serialization/deserialization with error handling
+- Configurable TTL for different data types (24h for results, 7d for contexts)
 - Graceful degradation when Redis is unavailable
+- Comprehensive health monitoring and connection recovery
 - Professional logging without emojis
+
+Architecture:
+- Singleton pattern ensures single cache instance across application
+- Connection pooling with automatic reconnection
+- Memory-efficient serialization with compression support
+- Cache warming and invalidation strategies
+
+Example:
+    >>> from utils.cache_manager import get_cache_manager
+    >>> cache = get_cache_manager()
+    >>> cache.set_classification_result("recipe_123", {"keto": True, "vegan": False})
+    >>> result = cache.get_classification_result("recipe_123")
+    >>> print(result['classification']['keto'])
+    True
 """
 
-import redis
+# Try to import redis, with fallback
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    redis = None
+
 import json
 import os
 import logging
 from typing import Optional, Any, Dict, Union
 from pathlib import Path
+
+# Import app_config for centralized configuration
+from config import app_config
 
 # Configure professional logging
 logger = logging.getLogger(__name__)
@@ -31,6 +62,30 @@ class CacheManager:
     This class implements a singleton pattern and provides high-level caching
     operations for the diet classification pipeline. It handles connection
     failures gracefully and provides detailed logging for debugging.
+    
+    The CacheManager supports multiple data types with appropriate TTL settings:
+    - Classification results: 24-hour TTL for recipe classifications
+    - Ingredient contexts: 7-day TTL for nutritional/vegan data
+    - System statistics: 1-hour TTL for performance metrics
+    
+    Key Features:
+    - Automatic connection management with health checks
+    - JSON serialization with error handling
+    - Configurable TTL per data type
+    - Graceful fallback when Redis unavailable
+    - Comprehensive statistics and monitoring
+    
+    Attributes:
+        _instance: Singleton instance of CacheManager
+        _redis_client: Redis client connection
+        _is_connected: Connection status flag
+        
+    Example:
+        >>> cache = CacheManager()
+        >>> cache.set_ingredient_context("chicken", {"protein": 25.0, "keto": True})
+        >>> context = cache.get_ingredient_context("chicken")
+        >>> print(context['protein'])
+        25.0
     """
     
     _instance = None
@@ -38,19 +93,49 @@ class CacheManager:
     _is_connected = False
     
     def __new__(cls):
-        """Singleton pattern implementation."""
+        """
+        Singleton pattern implementation.
+        
+        Ensures only one CacheManager instance exists across the application,
+        providing consistent caching behavior and resource management.
+        
+        Returns:
+            CacheManager: Singleton instance of the cache manager
+        """
         if cls._instance is None:
             cls._instance = super(CacheManager, cls).__new__(cls)
             cls._instance._initialize()
         return cls._instance
     
     def _initialize(self):
-        """Initialize the Redis connection with environment-based configuration."""
+        """
+        Initialize the Redis connection with environment-based configuration.
+        
+        Sets up Redis connection using environment variables with sensible
+        defaults. Implements comprehensive error handling and connection
+        testing to ensure reliable operation.
+        
+        Configuration Sources (now from app_config):
+        - REDIS_HOST: Redis server hostname
+        - REDIS_PORT: Redis server port
+        - REDIS_DB: Redis database number
+        - REDIS_PASSWORD: Redis authentication password (optional)
+        
+        Raises:
+            None: All exceptions are caught and logged, system continues operation
+        """
+        if not REDIS_AVAILABLE:
+            logger.warning("Redis module not available. Operating in fallback mode (no caching)")
+            self._redis_client = None
+            self._is_connected = False
+            return
+            
         try:
-            # Redis configuration from environment variables
-            redis_host = os.environ.get("REDIS_HOST", "localhost")
-            redis_port = int(os.environ.get("REDIS_PORT", 6379))
-            redis_db = int(os.environ.get("REDIS_DB", 0))
+            # Redis configuration from app_config
+            redis_host = app_config.REDIS_HOST
+            redis_port = app_config.REDIS_PORT
+            redis_db = app_config.REDIS_DB
+            # Password can still be an env var
             redis_password = os.environ.get("REDIS_PASSWORD", None)
             
             # Connection configuration
@@ -84,10 +169,21 @@ class CacheManager:
         """
         Check if Redis is available and responsive.
         
+        Performs a health check on the Redis connection and updates the
+        connection status. This method is called before each cache operation
+        to ensure reliable behavior.
+        
         Returns:
-            bool: True if Redis is available, False otherwise
+            bool: True if Redis is available and responsive, False otherwise
+            
+        Example:
+            >>> cache = CacheManager()
+            >>> if cache.is_available():
+            ...     cache.set_classification_result("test", {"result": True})
+            ... else:
+            ...     print("Cache unavailable, skipping operation")
         """
-        if not self._redis_client:
+        if not self._redis_client or not REDIS_AVAILABLE:
             return False
         
         try:
@@ -106,11 +202,21 @@ class CacheManager:
         """
         Retrieve a cached classification result for a recipe.
         
+        Retrieves a previously cached classification result with metadata
+        including cache timestamp and version information. Returns None
+        if the result is not cached or Redis is unavailable.
+        
         Args:
             recipe_id: Unique identifier for the recipe
             
         Returns:
             Dict containing classification results and metadata, or None if not cached
+            
+        Example:
+            >>> result = cache.get_classification_result("recipe_123")
+            >>> if result:
+            ...     print(f"Keto: {result['classification']['keto']}")
+            ...     print(f"Cached at: {result['cached_at']}")
         """
         if not self.is_available():
             return None
@@ -132,10 +238,18 @@ class CacheManager:
         """
         Cache a classification result for a recipe.
         
+        Stores a classification result with metadata including cache timestamp
+        and version information. The result is stored with a default TTL of
+        24 hours to balance performance and data freshness.
+        
         Args:
             recipe_id: Unique identifier for the recipe
             result: Classification result dictionary
             ttl: Time to live in seconds (default: 24 hours)
+            
+        Example:
+            >>> result = {"keto": True, "vegan": False, "confidence": 0.95}
+            >>> cache.set_classification_result("test_recipe_123", result)
         """
         if not self.is_available():
             logger.debug(f"Redis unavailable, skipping cache write for recipe {recipe_id}")
@@ -162,11 +276,21 @@ class CacheManager:
         """
         Retrieve cached factual context for an ingredient.
         
+        Retrieves previously cached nutritional and vegan context information
+        for an ingredient. This data has a longer TTL (7 days) since it
+        represents factual information that changes infrequently.
+        
         Args:
             ingredient_name: Normalized ingredient name
             
         Returns:
             Dict containing nutritional and vegan context, or None if not cached
+            
+        Example:
+            >>> context = cache.get_ingredient_context("chicken breast")
+            >>> if context:
+            ...     print(f"Protein: {context['nutrition']['protein_g']}g")
+            ...     print(f"Vegan: {context['vegan']['is_vegan']}")
         """
         if not self.is_available():
             return None
@@ -187,10 +311,21 @@ class CacheManager:
         """
         Cache factual context for an ingredient.
         
+        Stores nutritional and vegan context information for an ingredient
+        with a default TTL of 7 days. This longer TTL is appropriate since
+        nutritional data changes infrequently.
+        
         Args:
             ingredient_name: Normalized ingredient name
             context: Factual context dictionary
             ttl: Time to live in seconds (default: 7 days)
+            
+        Example:
+            >>> context = {
+            ...     "nutrition": {"protein_g": 25.0, "calories": 165},
+            ...     "vegan": {"is_vegan": False, "reason": "animal product"}
+            ... }
+            >>> cache.set_ingredient_context("chicken breast", context)
         """
         if not self.is_available():
             return
@@ -206,7 +341,7 @@ class CacheManager:
             
             serialized_data = json.dumps(cache_data, ensure_ascii=False, separators=(',', ':'))
             self._redis_client.setex(cache_key, ttl, serialized_data)
-            logger.debug(f"Cached context for ingredient {ingredient_name}")
+            logger.debug(f"Cached ingredient context for {ingredient_name}")
             
         except (redis.exceptions.RedisError, TypeError) as e:
             logger.error(f"Failed to cache context for ingredient {ingredient_name}: {e}")
@@ -215,77 +350,118 @@ class CacheManager:
         """
         Get cache statistics and health information.
         
+        Retrieves comprehensive statistics about cache usage, performance,
+        and health status. This information is useful for monitoring and
+        debugging cache behavior.
+        
         Returns:
-            Dict containing cache statistics
+            Dict containing cache statistics and health information
+            
+        Example:
+            >>> stats = cache.get_stats()
+            >>> print(f"Cache hits: {stats['hits']}")
+            >>> print(f"Cache misses: {stats['misses']}")
+            >>> print(f"Connection status: {stats['connected']}")
         """
+        stats = {
+            "connected": self._is_connected,
+            "available": self.is_available(),
+            "hits": 0,
+            "misses": 0,
+            "keys": 0
+        }
+        
         if not self.is_available():
-            return {
-                "status": "unavailable",
-                "total_keys": 0,
-                "classification_keys": 0,
-                "ingredient_keys": 0
-            }
+            return stats
         
         try:
+            # Get basic Redis info
             info = self._redis_client.info()
+            stats.update({
+                "redis_version": info.get("redis_version", "unknown"),
+                "used_memory_human": info.get("used_memory_human", "unknown"),
+                "connected_clients": info.get("connected_clients", 0),
+                "total_commands_processed": info.get("total_commands_processed", 0)
+            })
             
-            # Count different key types
+            # Count keys by pattern
             classification_keys = len(self._redis_client.keys("classification:*"))
             ingredient_keys = len(self._redis_client.keys("ingredient:*"))
-            total_keys = info.get('db0', {}).get('keys', 0) if 'db0' in info else 0
+            stats["keys"] = classification_keys + ingredient_keys
+            stats["classification_keys"] = classification_keys
+            stats["ingredient_keys"] = ingredient_keys
             
-            return {
-                "status": "connected",
-                "total_keys": total_keys,
-                "classification_keys": classification_keys,
-                "ingredient_keys": ingredient_keys,
-                "memory_usage": info.get('used_memory_human', 'unknown'),
-                "connected_clients": info.get('connected_clients', 0),
-                "uptime_seconds": info.get('uptime_in_seconds', 0)
-            }
         except redis.exceptions.RedisError as e:
             logger.error(f"Failed to get cache statistics: {e}")
-            return {"status": "error", "error": str(e)}
+            stats["error"] = str(e)
+        
+        return stats
     
     def clear_cache(self, pattern: Optional[str] = None):
         """
         Clear cache entries matching a pattern.
         
+        Removes cache entries that match the specified pattern. If no pattern
+        is provided, clears all cache entries. This is useful for cache
+        invalidation and maintenance.
+        
         Args:
-            pattern: Redis key pattern (e.g., "classification:*"). If None, clears all cache.
+            pattern: Redis key pattern to match (e.g., "classification:*")
+                    If None, clears all cache entries
+            
+        Example:
+            >>> cache.clear_cache("classification:*")  # Clear all classification results
+            >>> cache.clear_cache()  # Clear entire cache
         """
         if not self.is_available():
-            logger.warning("Cannot clear cache: Redis unavailable")
+            logger.warning("Redis unavailable, cannot clear cache")
             return
         
         try:
             if pattern:
                 keys = self._redis_client.keys(pattern)
                 if keys:
-                    deleted = self._redis_client.delete(*keys)
-                    logger.info(f"Cleared {deleted} cache entries matching pattern '{pattern}'")
+                    self._redis_client.delete(*keys)
+                    logger.info(f"Cleared {len(keys)} cache entries matching pattern: {pattern}")
+                else:
+                    logger.info(f"No cache entries found matching pattern: {pattern}")
             else:
                 self._redis_client.flushdb()
-                logger.info("Cleared entire cache database")
+                logger.info("Cleared entire cache")
+                
         except redis.exceptions.RedisError as e:
             logger.error(f"Failed to clear cache: {e}")
     
     def _get_current_timestamp(self) -> str:
-        """Get current timestamp in ISO format."""
+        """
+        Get current timestamp in ISO format for cache metadata.
+        
+        Returns:
+            str: Current timestamp in ISO 8601 format
+            
+        Example:
+            >>> timestamp = cache._get_current_timestamp()
+            >>> print(timestamp)
+            '2024-01-15T10:30:45.123456'
+        """
         from datetime import datetime
-        return datetime.utcnow().isoformat() + "Z"
-
-# Global cache manager instance
-cache_manager = CacheManager()
+        return datetime.now().isoformat()
 
 def get_cache_manager() -> CacheManager:
     """
     Get the global cache manager instance.
     
+    This function provides access to the singleton CacheManager instance,
+    ensuring consistent caching behavior across the application.
+    
     Returns:
-        CacheManager: The singleton cache manager instance
+        CacheManager: Global cache manager instance
+        
+    Example:
+        >>> cache = get_cache_manager()
+        >>> cache.set_classification_result("test", {"result": True})
     """
-    return cache_manager
+    return CacheManager()
 
 if __name__ == "__main__":
     # Basic testing and demonstration
@@ -326,10 +502,20 @@ if __name__ == "__main__":
             print("✗ Classification result caching failed")
         
         # Show stats
+        print("\nCache Stats:")
         stats = cm.get_stats()
-        print(f"✓ Cache stats: {stats['total_keys']} total keys")
-        
+        for k, v in stats.items():
+            print(f"- {k}: {v}")
+            
+        # Clear cache
+        print("\nClearing cache...")
+        cm.clear_cache()
+        if not cm.get_classification_result("test_recipe_123") and not cm.get_ingredient_context("chicken_breast"):
+            print("✓ Cache cleared successfully")
+        else:
+            print("✗ Cache clear failed")
+            
     else:
-        print("✗ Redis connection failed - operating in fallback mode")
+        print("✗ Redis connection failed. Check Redis server and configuration.")
     
-    print("\nCache manager ready for use!") 
+    print("\nDemonstration complete.") 

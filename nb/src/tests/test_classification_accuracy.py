@@ -1,15 +1,62 @@
 #!/usr/bin/env python3
 """
-Phase 4 Validation: Submission Requirements KPIs
+Classification Accuracy Test Suite for Diet Classification System
 
-Validates Arctic → Qwen pipeline performance against specific benchmarks.
+This module provides comprehensive testing for classification accuracy and performance
+validation against specific KPI benchmarks. It validates the Arctic → Qwen pipeline
+performance and ensures the system meets submission requirements.
+
+The test suite covers:
+- Individual ingredient classification accuracy
+- Full recipe classification performance
+- Input format compatibility testing
+- Processing time validation
+- KPI benchmark compliance
+- F1-score and precision/recall metrics
+
+Key Test Areas:
+- Keto classification accuracy (benchmark: 75%)
+- Vegan classification accuracy (benchmark: 80%)
+- Processing time validation (max 5s per ingredient, 30s per recipe)
+- SQL generation success rate (benchmark: 90%)
+- Input format compatibility and robustness
+- Performance metrics calculation and reporting
+
+Test Features:
+- Comprehensive benchmark testing
+- Multiple input format validation
+- Performance timing and monitoring
+- Error handling and graceful degradation
+- Detailed logging and reporting
+- KPI compliance validation
+
+KPI Benchmarks:
+- keto_accuracy_min: 0.75 (75%)
+- vegan_accuracy_min: 0.80 (80%)
+- keto_f1_min: 0.70 (70%)
+- vegan_f1_min: 0.75 (75%)
+- max_processing_time_per_ingredient: 5.0 seconds
+- sql_generation_success_rate_min: 0.90 (90%)
+- max_processing_time_per_recipe: 30.0 seconds
+
+Dependencies:
+- sklearn: Machine learning metrics calculation
+- pandas: Data manipulation and analysis
+- time: Performance timing
+- json: Data serialization
+- logging: Comprehensive logging and reporting
+
+Example:
+    >>> python nb/src/tests/test_classification_accuracy.py
+    >>> # Run complete accuracy validation
+    >>> sys.exit(main())
 """
 import sys
 import time
 import json
 from pathlib import Path
 import logging
-import pandas as pd
+import polars as pd
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -37,7 +84,44 @@ BENCHMARKS = {
 }
 
 def test_individual_ingredients():
-    """Test individual ingredient classification performance."""
+    """
+    Test individual ingredient classification performance.
+    
+    This function validates the accuracy of individual ingredient classification
+    using a curated set of test cases with known dietary characteristics. It
+    measures both keto and vegan classification accuracy, processing times,
+    and F1 scores.
+    
+    Test Cases:
+        - "chicken breast": Expected keto=True, vegan=False
+        - "spinach": Expected keto=True, vegan=True
+        - "sugar": Expected keto=False, vegan=True
+        - "butter": Expected keto=True, vegan=False
+        - "olive oil": Expected keto=True, vegan=True
+        - "flour": Expected keto=False, vegan=True
+        - "eggs": Expected keto=True, vegan=False
+        - "broccoli": Expected keto=True, vegan=True
+        - "milk": Expected keto=False, vegan=False
+        - "avocado": Expected keto=True, vegan=True
+        
+    The test validates:
+    - Individual ingredient classification accuracy
+    - Processing time performance
+    - Error handling and robustness
+    - Benchmark compliance
+    - F1-score calculation
+        
+    Returns:
+        dict: Dictionary containing accuracy metrics, processing times, and F1 scores
+        
+    Raises:
+        Exception: If classification functions fail unexpectedly
+        
+    Example:
+        >>> results = test_individual_ingredients()
+        >>> print(f"Keto accuracy: {results['keto_accuracy']:.2f}")
+        >>> print(f"Vegan accuracy: {results['vegan_accuracy']:.2f}")
+    """
     from diet_classifiers import is_ingredient_keto, is_ingredient_vegan
     
     # Test cases with known answers
@@ -116,7 +200,38 @@ def test_individual_ingredients():
     return results
 
 def test_recipe_classification():
-    """Test full recipe classification performance."""
+    """
+    Test full recipe classification performance.
+    
+    This function validates the accuracy of full recipe classification using
+    curated test recipes with known dietary characteristics. It measures both
+    keto and vegan classification accuracy for complete recipes.
+    
+    Test Recipes:
+        1. ["chicken breast", "spinach", "olive oil"]: Expected keto=True, vegan=False
+        2. ["quinoa", "black beans", "avocado"]: Expected keto=False, vegan=True
+        3. ["salmon", "asparagus", "butter"]: Expected keto=True, vegan=False
+        4. ["pasta", "tomato sauce", "cheese"]: Expected keto=False, vegan=False
+        5. ["lettuce", "cucumber", "olive oil"]: Expected keto=True, vegan=True
+        
+    The test validates:
+    - Full recipe classification accuracy
+    - Multi-ingredient processing capability
+    - Processing time performance for recipes
+    - Error handling for complex inputs
+    - Benchmark compliance for recipe processing
+        
+    Returns:
+        dict: Dictionary containing recipe accuracy metrics and processing times
+        
+    Raises:
+        Exception: If recipe classification functions fail unexpectedly
+        
+    Example:
+        >>> results = test_recipe_classification()
+        >>> print(f"Recipe keto accuracy: {results['recipe_keto_accuracy']:.2f}")
+        >>> print(f"Recipe vegan accuracy: {results['recipe_vegan_accuracy']:.2f}")
+    """
     from diet_classifiers import is_keto, is_vegan
     
     # Test recipes with known classifications
@@ -178,7 +293,36 @@ def test_recipe_classification():
     }
 
 def test_input_format_compatibility():
-    """Test that diet_classifiers handles original submission format."""
+    """
+    Test that diet_classifiers handles original submission format.
+    
+    This function validates that the classification system can handle various
+    input formats including JSON strings, comma-separated strings, and direct
+    lists. It ensures backward compatibility with the original submission format.
+    
+    Test Formats:
+        1. JSON string format: '["chicken breast", "spinach", "olive oil"]'
+        2. Comma-separated string: "chicken breast, spinach, olive oil"
+        3. Direct list format: ["chicken breast", "spinach", "olive oil"]
+        
+    The test validates:
+    - Input format compatibility and parsing
+    - Consistent results across different formats
+    - Error handling for malformed inputs
+    - Backward compatibility with original format
+    - Robustness of input processing
+        
+    Returns:
+        list: List of results for each input format tested
+        
+    Raises:
+        Exception: If input format processing fails unexpectedly
+        
+    Example:
+        >>> results = test_input_format_compatibility()
+        >>> for i, result in enumerate(results):
+        >>>     print(f"Format {i+1}: {result}")
+    """
     from diet_classifiers import is_keto, is_vegan
     
     logger.info("Testing input format compatibility...")

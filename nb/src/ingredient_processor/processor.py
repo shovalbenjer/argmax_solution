@@ -1,8 +1,7 @@
 import sys
 from pathlib import Path
-import pandas as pd
+import polars as pl
 import json
-from ingredient_parser import parse_ingredient
 from loguru import logger
 from rapidfuzz import process, fuzz
 from typing import List, Dict, Optional, Tuple
@@ -26,15 +25,31 @@ class EnhancedIngredientProcessor:
         self._ingredient_names_cache = None
         self._nutrition_cache = {}
         self._vegan_cache = {}
-        
+        self._ingredient_parser_available = False
+
+    def _initialize_ingredient_parser(self):
+        """Initializes ingredient_parser lazily."""
+        if not self._ingredient_parser_available:
+            try:
+                from ingredient_parser import parse_ingredient as _parse_ingredient
+                self._parse_ingredient_func = _parse_ingredient
+                self._ingredient_parser_available = True
+                logger.info("ingredient-parser successfully initialized.")
+            except ImportError as e:
+                logger.warning(f"ingredient-parser-nlp not available: {e}. Using fallback parsing.")
+                self._ingredient_parser_available = False
+            except Exception as e:
+                logger.error(f"Unexpected error initializing ingredient-parser: {e}. Using fallback.")
+                self._ingredient_parser_available = False
+
     def get_all_ingredient_names(self) -> List[str]:
-        """Fetches all unique ingredient names from the knowledge graph for fuzzy matching."""
-        try:
-            with db_manager.get_sqlite_connection() as conn:
-                return pd.read_sql("SELECT DISTINCT name FROM nutrition_facts", conn)['name'].tolist()
-        except Exception as e:
-            logger.warning(f"Could not load ingredient names: {e}")
-            return []
+    """Fetches all unique ingredient names from the knowledge graph for fuzzy matching."""
+    try:
+        with db_manager.get_sqlite_connection() as conn:
+                return pl.read_database("SELECT DISTINCT name FROM nutrition_facts", conn)['name'].to_list()
+    except Exception as e:
+        logger.warning(f"Could not load ingredient names: {e}")
+        return []
 
     def get_ingredient_names_cached(self) -> List[str]:
         """Get cached ingredient names, loading them if needed."""
@@ -62,28 +77,35 @@ class EnhancedIngredientProcessor:
         Safely parse ingredient text and extract the base ingredient name.
         Returns (normalized_name, parsed_data) tuple.
         """
-        try:
-            parsed = parse_ingredient(raw_ingredient)
-            if parsed and hasattr(parsed, 'name') and parsed.name:
-                base_name = parsed.name.text if hasattr(parsed.name, 'text') else str(parsed.name)
-                normalized = self.normalize_ingredient(base_name)
-                
-                # Extract additional parsed data
-                parsed_data = {
-                    'quantity': getattr(parsed, 'quantity', None),
-                    'unit': getattr(parsed, 'unit', None),
-                    'preparation': getattr(parsed, 'preparation', None),
-                    'original_name': base_name
-                }
-                
-                return normalized, parsed_data
-            else:
-                # Fallback to direct normalization
+        self._initialize_ingredient_parser()
+        
+        if self._ingredient_parser_available:
+            try:
+                parsed = self._parse_ingredient_func(raw_ingredient)
+                if parsed and hasattr(parsed, 'name') and parsed.name:
+                    base_name = parsed.name.text if hasattr(parsed.name, 'text') else str(parsed.name)
+                    normalized = self.normalize_ingredient(base_name)
+                    
+                    # Extract additional parsed data
+                    parsed_data = {
+                        'quantity': getattr(parsed, 'quantity', None),
+                        'unit': getattr(parsed, 'unit', None),
+                        'preparation': getattr(parsed, 'preparation', None),
+                        'original_name': base_name
+                    }
+                    
+                    return normalized, parsed_data
+                else:
+                    # Fallback to direct normalization
+                    normalized = self.normalize_ingredient(raw_ingredient)
+                    return normalized, None
+                    
+            except Exception as e:
+                logger.debug(f"Ingredient parsing failed for '{raw_ingredient}': {e}. Falling back to normalization.")
                 normalized = self.normalize_ingredient(raw_ingredient)
                 return normalized, None
-                
-        except Exception as e:
-            logger.debug(f"Ingredient parsing failed for '{raw_ingredient}': {e}")
+        else:
+            logger.debug(f"ingredient-parser not available. Using fallback normalization for '{raw_ingredient}'.")
             normalized = self.normalize_ingredient(raw_ingredient)
             return normalized, None
 
@@ -102,13 +124,13 @@ class EnhancedIngredientProcessor:
         # Fetch uncached items from database
         if uncached_names:
             try:
-                with db_manager.get_sqlite_connection() as conn:
+    with db_manager.get_sqlite_connection() as conn:
                     placeholders = ','.join(['?'] * len(uncached_names))
                     query = f"SELECT * FROM nutrition_facts WHERE name IN ({placeholders})"
-                    df = pd.read_sql(query, conn, params=uncached_names)
+                    df = pl.read_database(query, conn, execute_options={"parameters": uncached_names})
                     
                     # Cache the results
-                    for row in df.to_dict('records'):
+                    for row in df.to_dicts():
                         self._nutrition_cache[row['name']] = row
                         cached_results[row['name']] = row
                         
@@ -150,7 +172,7 @@ class EnhancedIngredientProcessor:
         
         # Use rapidfuzz for fuzzy matching
         matches = process.extract(normalized_name, all_names, scorer=fuzz.WRatio, limit=limit)
-        return [(match[0], match[1]) for match in matches if match[1] > 60]  # Only return matches above 60% similarity
+        return [(match[0], match[1]) for match in matches if match[1] > 60]
 
     def process_ingredient_comprehensive(self, raw_ingredient: str) -> Dict:
         """

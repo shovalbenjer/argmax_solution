@@ -1,112 +1,220 @@
+# eda_database.py
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pathlib import Path
-from sklearn.manifold import TSNE
 import numpy as np
+import re
+from pathlib import Path
+from collections import Counter
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from tqdm import tqdm
 
-# Use a modern, publication-quality plotting style
+# --- SOTA Dependencies ---
+try:
+    from database import db_manager
+    from config import app_config
+    DB_AVAILABLE = True
+except ImportError as e:
+    print(f"Error: Could not import database or config module: {e}")
+    DB_AVAILABLE = False
+
+try:
+    from ingredient_normalizer import normalizer
+    PARSER_AVAILABLE = True
+except ImportError:
+    print("Warning: 'ingredient-parser' or 'ingredient_normalizer' not found. Analysis will be less accurate.")
+    print("         Ensure 'ingredient-parser-nlp' is installed with: pip install ingredient-parser-nlp")
+    PARSER_AVAILABLE = False
+
+# --- Configuration & Constants ---
+TOP_N_ITEMS = 15
+KETO_CARB_THRESHOLD_G = 25
+
+# --- Schema Alignment ---
+COL_CALORIES = 'calories'
+COL_PROTEIN = 'protein_g'
+COL_FAT = 'total_fat_g'
+COL_CARB = 'carbohydrate_g'
+
+# --- Plotting Style ---
 sns.set_theme(style="whitegrid", palette="viridis")
+FIG_SIZE_WIDE = (18, 8)
+FIG_SIZE_SQUARE = (14, 12)
 
-# --- Configuration ---
-NUTRITION_PATH = Path("nb/src/raw_data/nutrition.csv")
-GROUND_TRUTH_PATH = Path("nb/src/data/ground_truth_sample.csv") # Assumes this is generated
-EMBEDDINGS_PATH = Path("nb/src/data/ingredient_embeddings.npy") # Assumes this is generated
-
-# --- 1. Raw Nutrition Data EDA ---
-print("--- 1. Comprehensive EDA on Raw Nutrition Data ---")
-if not NUTRITION_PATH.exists():
-    print(f"❌ Nutrition data file not found at {NUTRITION_PATH}.")
-else:
-    df_nutrition = pd.read_csv(NUTRITION_PATH)
-    
-    # Identify the carbohydrate column robustly
-    carb_col = next((col for col in df_nutrition.columns if 'carb' in col.lower()), None)
-    
-    if carb_col:
-        df_nutrition['carbs_numeric'] = pd.to_numeric(df_nutrition[carb_col], errors='coerce')
-        df_nutrition.dropna(subset=['carbs_numeric'], inplace=True)
-
-        print("\n📝 Summary Statistics for Carbohydrates (per 100g):")
-        summary_stats = df_nutrition['carbs_numeric'].describe()
-        print(summary_stats)
-
-        # Generate a figure with multiple subplots for a dashboard-style view
-        fig, axes = plt.subplots(1, 2, figsize=(18, 6))
-        fig.suptitle('Analysis of Carbohydrate Distribution in Ingredients', fontsize=20, weight='bold')
-
-        # Distribution Plot (Histogram + KDE)
-        sns.histplot(df_nutrition['carbs_numeric'], bins=50, kde=True, ax=axes[0], color="skyblue")
-        axes[0].set_title('Distribution of Carbohydrates', fontsize=16)
-        axes[0].set_xlabel('Carbohydrates (g) per 100g')
-        axes[0].set_ylabel('Frequency of Ingredients')
-        axes[0].axvline(10, color='r', linestyle='--', linewidth=2.5, label='Keto Threshold (10g)')
-        axes[0].set_xlim(0, 100)
-        axes[0].legend()
-
-        # Outlier Detection (Boxenplot for enhanced detail)
-        sns.boxenplot(x=df_nutrition['carbs_numeric'], ax=axes[1], color="lightgreen")
-        axes[1].set_title('Outlier and Distribution Analysis via Boxenplot', fontsize=16)
-        axes[1].set_xlabel('Carbohydrates (g) per 100g')
-        axes[1].axvline(10, color='r', linestyle='--', linewidth=2.5)
-        axes[1].set_xlim(0, 100)
-        
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        plt.show()
-
-# --- 2. Ground Truth Dataset Analysis ---
-print("\n--- 2. Analysis of Gemini-Generated Ground Truth Personas ---")
-if not GROUND_TRUTH_PATH.exists():
-    print("❌ GROUND TRUTH FILE NOT FOUND. Run ground truth generation first.")
-else:
-    df_gt = pd.read_csv(GROUND_TRUTH_PATH)
-    
-    # Assuming the ground truth CSV has 'is_vegan' and 'is_keto' columns
-    if 'is_vegan' in df_gt.columns and 'is_keto' in df_gt.columns:
-        df_gt['classification_persona'] = 'Neither'
-        df_gt.loc[df_gt['is_vegan'] == True, 'classification_persona'] = 'Vegan'
-        df_gt.loc[df_gt['is_keto'] == True, 'classification_persona'] = 'Keto'
-        df_gt.loc[(df_gt['is_vegan'] == True) & (df_gt['is_keto'] == True), 'classification_persona'] = 'Both'
-        
-        plt.figure(figsize=(12, 7))
-        sns.countplot(data=df_gt, x='classification_persona', order=['Vegan', 'Keto', 'Both', 'Neither'], palette="magma")
-        plt.title('Distribution of Dietary Personas in Ground Truth Dataset', fontsize=18, weight='bold')
-        plt.xlabel('Classification Persona', fontsize=14)
-        plt.ylabel('Number of Recipes', fontsize=14)
-        plt.show()
-
-# --- 3. SOTA Visualization: Ingredient Embedding Space ---
-print("\n--- 3. SOTA Validation: Visualizing Ingredient Embeddings with UMAP ---")
-if not EMBEDDINGS_PATH.exists():
-    print(f"❌ Ingredient embeddings not found at {EMBEDDINGS_PATH}. Cannot generate UMAP plot.")
-else:
-    print("Loading embeddings and generating UMAP plot... (this may take a moment)")
-    # UMAP is generally faster and better at preserving global structure than t-SNE. [1, 2]
+# --- Data Loading Functions (Unchanged) ---
+def load_nutrition_data_from_db() -> pd.DataFrame | None:
+    print("--- Loading Nutrition Data from SQLite database ---")
     try:
-        from umap import UMAP
-        embeddings = np.load(EMBEDDINGS_PATH)
-        # Assuming you have a corresponding df_nutrition with a 'category' column
-        ingredient_categories = df_nutrition.head(len(embeddings))['Food group'] # Example category
+        with db_manager.get_sqlite_connection() as conn:
+            df = pd.read_sql("SELECT * FROM nutrition_facts", conn)
+        
+        required_macros = [COL_PROTEIN, COL_FAT, COL_CARB, COL_CALORIES]
+        missing_cols = [col for col in required_macros if col not in df.columns]
+        if missing_cols:
+            print(f"Error: The 'nutrition_facts' table is missing required columns: {missing_cols}")
+            return df
 
-        reducer = UMAP(n_neighbors=15, min_dist=0.1, n_components=2, random_state=42)
-        embedding_2d = reducer.fit_transform(embeddings)
-
-        plt.figure(figsize=(14, 10))
-        sns.scatterplot(
-            x=embedding_2d[:, 0],
-            y=embedding_2d[:, 1],
-            hue=ingredient_categories,
-            palette=sns.color_palette("hsv", len(ingredient_categories.unique())),
-            s=50,
-            alpha=0.7
-        )
-        plt.title('UMAP Projection of Ingredient Embeddings', fontsize=20, weight='bold')
-        plt.xlabel('UMAP Dimension 1')
-        plt.ylabel('UMAP Dimension 2')
-        plt.legend(title='Ingredient Category', bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-        plt.show()
-        print("✅ UMAP plot generated. Check for meaningful clusters to validate embedding quality.")
-    except ImportError:
-        print("❌ UMAP not installed. Please run 'pip install umap-learn' for this visualization.")
+        df['calculated_calories'] = (df[COL_PROTEIN] * 4) + (df[COL_CARB] * 4) + (df[COL_FAT] * 9)
+        correlation = df[COL_CALORIES].corr(df['calculated_calories'])
+        print(f"Calorie Sanity Check: Correlation between reported and calculated calories: {correlation:.4f}")
+        
+        print(f"Successfully loaded {len(df)} records from 'nutrition_facts'.\n")
+        return df
     except Exception as e:
-        print(f"An error occurred during UMAP visualization: {e}")
+        print(f"Error: Failed to load data from 'nutrition_facts' table: {e}")
+        return None
+
+def load_recipes_from_opensearch(limit: int = 1000) -> pd.DataFrame | None:
+    print("--- Loading Recipe Data from OpenSearch ---")
+    client = db_manager.get_opensearch_client()
+    if not client:
+        print("Error: OpenSearch client is not available. Cannot load recipes.\n")
+        return None
+        
+    try:
+        query = {"query": {"match_all": {}}}
+        response = client.search(index="recipes", body=query, size=limit)
+        
+        hits = response['hits']['hits']
+        if not hits:
+            return pd.DataFrame()
+            
+        recipes_data = [hit['_source'] for hit in hits]
+        df = pd.DataFrame.from_records(recipes_data)
+        
+        print(f"Successfully loaded {len(df)} recipes from OpenSearch.\n")
+        return df
+    except Exception as e:
+        print(f"Error: Failed to load data from OpenSearch 'recipes' index: {e}")
+        return None
+
+# --- Analysis & Plotting Functions (Unchanged) ---
+def plot_nutrition_db_analysis(df: pd.DataFrame):
+    print("--- Part 1: Analysis of the Nutrition Database ---")
+    fig, axes = plt.subplots(2, 2, figsize=FIG_SIZE_SQUARE)
+    fig.suptitle('Analysis of the Nutrition Database', fontsize=20, weight='bold')
+    if COL_CALORIES in df.columns and 'calculated_calories' in df.columns:
+        sns.scatterplot(data=df, x=COL_CALORIES, y='calculated_calories', alpha=0.3, ax=axes[0, 0])
+        axes[0, 0].plot([0, df[COL_CALORIES].max()], [0, df[COL_CALORIES].max()], 'r--', label='Ideal (y=x)')
+        axes[0, 0].legend()
+    axes[0, 0].set_title('Data Quality: Reported vs. Calculated Calories')
+    macros = [COL_PROTEIN, COL_FAT, COL_CARB]
+    available_macros = [m for m in macros if m in df.columns]
+    if available_macros:
+        sns.boxplot(data=df[available_macros], ax=axes[0, 1], palette="mako")
+    axes[0, 1].set_title('Distribution of Macronutrients (per 100g)')
+    if all(col in df.columns for col in [COL_CARB, COL_FAT, COL_PROTEIN]):
+        low_carb_foods = df[df[COL_CARB] <= 5]
+        sns.scatterplot(data=low_carb_foods, x=COL_FAT, y=COL_PROTEIN, alpha=0.5, ax=axes[1, 0])
+    axes[1, 0].set_title('Protein vs. Fat Profile of Low-Carb Foods (<5g)')
+    numeric_cols_for_pca = df.select_dtypes(include=np.number).columns.drop([COL_CALORIES, 'calculated_calories'], errors='ignore')
+    if not numeric_cols_for_pca.empty:
+        X_scaled = StandardScaler().fit_transform(df[numeric_cols_for_pca].values)
+        pca = PCA(n_components=2)
+        components = pca.fit_transform(X_scaled)
+        df_pca = pd.DataFrame(data=components, columns=['PC1', 'PC2'])
+        sns.scatterplot(data=df_pca, x='PC1', y='PC2', alpha=0.3, ax=axes[1, 1])
+        axes[1, 1].set_xlabel(f'PC1 ({pca.explained_variance_ratio_[0]:.1%} var)')
+        axes[1, 1].set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]:.1%} var)')
+    axes[1, 1].set_title('PCA of Nutrients: A "Food Map"')
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()
+
+# --- NLP Analysis and Plotting Function ---
+
+def infer_and_analyze_diets(df_recipes: pd.DataFrame):
+    """
+    Performs NLP analysis on recipe ingredients to find common terms and visualizes the results.
+    """
+    if not PARSER_AVAILABLE:
+        print("Cannot perform NLP analysis because 'ingredient-parser' is not installed or normalizer is unavailable.")
+        return
+
+    print("\n--- Part 2 & 3: NLP Analysis of Recipe Ingredients ---")
+
+    all_ingredients_flat = []
+    for _, recipe in df_recipes.iterrows():
+        for ing_string in recipe.get('ingredients', []):
+            # Use the normalizer to get a clean, basic ingredient name
+            cleaned_ing_name = normalizer.normalize_ingredient(ing_string)
+            if cleaned_ing_name:
+                all_ingredients_flat.append(cleaned_ing_name)
+
+    # Calculate top N most common ingredients
+    top_common_ingredients = Counter(all_ingredients_flat).most_common(TOP_N_ITEMS)
+
+    print(f"Total unique ingredients processed: {len(set(all_ingredients_flat))}")
+    print(f"Top {TOP_N_ITEMS} most common ingredients: {top_common_ingredients}")
+
+    # --- New Visualizations ---
+    fig, axes = plt.subplots(1, 2, figsize=FIG_SIZE_WIDE) # Adjust subplot layout
+
+    # Plot 1: Top N Most Common Ingredients
+    if top_common_ingredients:
+        df_top_ingredients = pd.DataFrame(top_common_ingredients, columns=['ingredient', 'count'])
+        sns.barplot(data=df_top_ingredients, x='count', y='ingredient', hue='ingredient', ax=axes[0], palette="viridis", legend=False)
+        axes[0].set_title(f'Top {TOP_N_ITEMS} Most Common Ingredients')
+        axes[0].set_xlabel('Count in Recipes')
+        axes[0].set_ylabel('Ingredient')
+    else:
+        axes[0].text(0.5, 0.5, "No ingredients found for analysis.", ha='center', va='center', fontsize=12)
+        axes[0].set_title(f'Top {TOP_N_ITEMS} Most Common Ingredients (No Data)')
+
+    # Plot 2: Distribution of Unique Ingredient Count Per Recipe
+    unique_ingredient_counts = []
+    for _, recipe in df_recipes.iterrows():
+        ingredients_in_recipe = [normalizer.normalize_ingredient(ing_string) for ing_string in recipe.get('ingredients', []) if normalizer.normalize_ingredient(ing_string)]
+        unique_ingredient_counts.append(len(set(ingredients_in_recipe)))
+
+    if unique_ingredient_counts:
+        sns.histplot(unique_ingredient_counts, bins=range(min(unique_ingredient_counts), max(unique_ingredient_counts) + 2), kde=True, ax=axes[1])
+        axes[1].set_title('Distribution of Unique Ingredient Count Per Recipe')
+        axes[1].set_xlabel('Number of Unique Ingredients')
+        axes[1].set_ylabel('Number of Recipes')
+    else:
+        axes[1].text(0.5, 0.5, "No unique ingredient count data for analysis.", ha='center', va='center', fontsize=12)
+        axes[1].set_title(f'Top {TOP_N_ITEMS} Most Common Ingredient Bigrams (No Data)') # Note: Title remains for bigrams if no unique ingredient counts
+
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()
+    
+    # --- Print key results for the markdown report ---
+    print("\n--- Key Findings for Report (NLP Analysis) ---")
+    print(f"Total recipes analyzed: {len(df_recipes)}")
+    if top_common_ingredients:
+        print(f"Most common ingredient: '{top_common_ingredients[0][0]}' (appears {top_common_ingredients[0][1]} times)")
+    else:
+        print("No common ingredients found.")
+    if unique_ingredient_counts:
+        print(f"Average unique ingredients per recipe: {np.mean(unique_ingredient_counts):.2f}")
+        print(f"Median unique ingredients per recipe: {np.median(unique_ingredient_counts)}")
+    else:
+        print("No unique ingredient count statistics.")
+
+
+def main():
+    """Main function to run the full EDA pipeline using the database layer."""
+    
+    if not DB_AVAILABLE:
+        print("\nDatabase modules not available. Aborting EDA.")
+        return
+        
+    print("="*80)
+    print("Starting State-of-the-Art Exploratory Data Analysis (Database Mode)")
+    print("="*80)
+
+    df_nutrition = load_nutrition_data_from_db()
+    if df_nutrition is not None:
+        plot_nutrition_db_analysis(df_nutrition)
+
+    df_recipes = load_recipes_from_opensearch()
+    if df_recipes is not None and not df_recipes.empty:
+        infer_and_analyze_diets(df_recipes)
+    else:
+        print("\nSkipping recipe analysis because no recipe data was loaded.")
+
+if __name__ == "__main__":
+    main()
