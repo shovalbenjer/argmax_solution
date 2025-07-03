@@ -394,7 +394,7 @@ Find any matches that indicate animal product status."""
                     if context_type == "nutrition":
                         fallback_data = processor.get_nutrition_data(best_match)
                         return json.dumps([fallback_data] if fallback_data else [], indent=2)
-        else:
+                    else:
                         fallback_data = processor.get_vegan_info(best_match)
                         return json.dumps([fallback_data] if fallback_data else [], indent=2)
                         
