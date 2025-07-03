@@ -1,9 +1,14 @@
 """
-Context-Aware Diet Classifier - Cache-First Function-Calling Architecture
+Context-Aware Diet Classifier - SOTA Semantic Architecture
 
-Integrates structured query results with LLM reasoning for diet classification.
-Uses a modern cache-first approach with Qwen Agent -> JSON -> SQL pipeline.
-Performance optimized with Redis caching for instant results on known ingredients.
+PIPELINE: Recipe Ingredient → ingredient-parser → Arctic Semantic SQL → Database → Fuzzy Fallback → Qwen
+
+Key Features:
+1. ingredient-parser: Extracts clean ingredient names from recipe strings
+2. Arctic Text2SQL: Generates semantic LIKE queries for flexible matching  
+3. Fuzzy fallback: RapidFuzz for when semantic queries fail
+4. Dual-database: nutrition_facts (keto) + vegan_ontology (vegan)
+5. Edge case handling: Compound foods, synonyms, processing variations
 """
 import sqlite3
 import json
@@ -14,6 +19,7 @@ import logging
 import polars as pl
 import hashlib
 import time
+import re
 
 from config import app_config
 from llm_client import LLMClient
@@ -21,6 +27,15 @@ from database import db_manager
 from function_calling_handler import FunctionCallingHandler
 from query_engine import translate_json_to_sql
 from utils.cache_manager import get_cache_manager
+from ingredient_processor.processor import processor
+
+# Import ingredient-parser for professional ingredient extraction
+try:
+    from ingredient_parser import parse_ingredient
+    INGREDIENT_PARSER_AVAILABLE = True
+except ImportError:
+    INGREDIENT_PARSER_AVAILABLE = False
+    logger.warning("ingredient-parser-nlp not available - using fallback parsing")
 
 # Configure professional logging
 logger = logging.getLogger(__name__)
@@ -41,16 +56,13 @@ def execute_sql_query(sql: str, params: List[Any]) -> str:
         logger.error(f"SQL execution failed: {e}")
         return f"Database query error: {e}"
 
-class ContextAwareDietClassifier:
+class SOTASemanticClassifier:
     """
-    Enhanced cache-first diet classifier using function-calling agent to query
-    the knowledge base and a separate LLM for final classification.
+    State-of-the-Art semantic diet classifier using the complete pipeline:
     
-    Performance Features:
-    - Redis cache check before expensive LLM operations
-    - Ingredient-level caching for reusable components
-    - Recipe-level caching for complete results
-    - Graceful fallback when cache is unavailable
+    Recipe → ingredient-parser → Arctic semantic SQL → Database → Fuzzy fallback → Qwen
+    
+    This solves the exact matching problem while maintaining high precision.
     """
     
     def __init__(self):
@@ -63,51 +75,168 @@ class ContextAwareDietClassifier:
         self.cache_misses = 0
         self.total_requests = 0
         
-    def _generate_ingredient_cache_key(self, ingredient: str) -> str:
-        """Generate a consistent cache key for an ingredient."""
-        # Normalize ingredient name for consistent caching
-        normalized = ingredient.lower().strip()
-        # Remove common quantifiers that don't affect classification
-        normalized = normalized.replace("100g", "").replace("1 cup", "").replace("1 tbsp", "").strip()
-        return f"ingredient_classification:{normalized}"
-    
-    def _generate_recipe_cache_key(self, ingredients: List[str]) -> str:
-        """Generate a consistent cache key for a recipe."""
-        # Sort ingredients for consistent key regardless of order
-        sorted_ingredients = sorted([ing.lower().strip() for ing in ingredients])
-        ingredients_str = "|".join(sorted_ingredients)
-        # Use hash for consistent short keys
-        hash_obj = hashlib.md5(ingredients_str.encode())
-        return f"recipe_classification:{hash_obj.hexdigest()}"
-    
+    def extract_ingredient_name(self, raw_ingredient: str) -> str:
+        """
+        Extract clean ingredient name using ingredient-parser (97.8% accuracy).
+        
+        Examples:
+        - "3 pounds pork shoulder, cut into chunks" → "pork shoulder"
+        - "2 tbsp extra virgin olive oil" → "olive oil" 
+        - "1 cup diced tomatoes" → "tomatoes"
+        """
+        if INGREDIENT_PARSER_AVAILABLE:
+            try:
+                parsed = parse_ingredient(raw_ingredient, discard_isolated_stop_words=True)
+                if parsed.name and len(parsed.name) > 0:
+                    clean_name = parsed.name[0].text.lower().strip()
+                    logger.debug(f"Parsed '{raw_ingredient}' → '{clean_name}' (confidence: {parsed.name[0].confidence:.3f})")
+                    return clean_name
+            except Exception as e:
+                logger.warning(f"Ingredient parser failed for '{raw_ingredient}': {e}")
+        
+        # Fallback: Basic cleaning for when ingredient-parser unavailable
+        clean_name = raw_ingredient.lower().strip()
+        # Remove quantities and units
+        clean_name = re.sub(r'^\d+[\s\w]*\s+', '', clean_name)  
+        # Remove preparation instructions
+        clean_name = re.sub(r',.*$', '', clean_name)  
+        clean_name = clean_name.strip()
+        
+        logger.debug(f"Fallback parsed '{raw_ingredient}' → '{clean_name}'")
+        return clean_name
+
+    async def _get_semantic_keto_context(self, ingredient: str) -> str:
+        """
+        Arctic-powered semantic search for keto classification.
+        
+        Uses LIKE queries to find nutritionally similar ingredients,
+        prioritizing raw/unprocessed forms.
+        """
+        clean_ingredient = self.extract_ingredient_name(ingredient)
+        
+        # Enhanced Arctic prompt for semantic similarity
+        question = f"""Find nutritional information for ingredients semantically similar to '{clean_ingredient}' in the nutrition_facts table.
+
+SEMANTIC SEARCH STRATEGY:
+1. Use LIKE operators with wildcards for flexible matching (e.g., '%{clean_ingredient}%')
+2. Prioritize raw, unprocessed forms (look for 'raw', 'fresh', 'uncooked')  
+3. Avoid compound/processed foods (souffle, casserole, prepared dishes)
+4. Include variant forms and preparations that maintain base nutrition
+
+TARGET INGREDIENT: {clean_ingredient}
+
+Return nutritional data focusing on: carbohydrate_g, fiber_g, protein_g, total_fat_g for keto assessment."""
+
+        # Generate Arctic semantic query
+        json_query = await self.function_handler.generate_json_query(question)
+        if "error" in json_query:
+            logger.error(f"Failed to generate semantic keto query for '{ingredient}': {json_query['error']}")
+            return await self._get_fuzzy_fallback_context(ingredient, "nutrition")
+
+        try:
+            sql, params = translate_json_to_sql(json_query)
+            logger.debug(f"Semantic keto SQL for '{ingredient}': {sql} with params {params}")
+            return execute_sql_query(sql, params)
+        except ValueError as e:
+            logger.error(f"Failed to translate semantic keto query: {e}")
+            return await self._get_fuzzy_fallback_context(ingredient, "nutrition")
+
+    async def _get_semantic_vegan_context(self, ingredient: str) -> str:
+        """
+        Arctic-powered semantic search for vegan classification.
+        
+        Searches vegan ontology for animal product detection using semantic matching.
+        """
+        clean_ingredient = self.extract_ingredient_name(ingredient)
+        
+        # Enhanced Arctic prompt for vegan semantic search
+        question = f"""Search the vegan_ontology table for animal product information about '{clean_ingredient}'.
+
+VEGAN SEMANTIC SEARCH:
+1. Check 'term' column with LIKE '%{clean_ingredient}%' for flexible matching
+2. Search 'aliases' column for alternative names (synonyms, regional names)
+3. Look for parent categories (e.g., 'milk' matches 'whole milk', 'skim milk')
+4. Return 'is_explicitly_non_vegan' flag and 'description' for animal origin info
+
+TARGET INGREDIENT: {clean_ingredient}
+
+Find any matches that indicate animal product status."""
+
+        # Generate Arctic semantic query  
+        json_query = await self.function_handler.generate_json_query(question)
+        if "error" in json_query:
+            logger.error(f"Failed to generate semantic vegan query for '{ingredient}': {json_query['error']}")
+            return await self._get_fuzzy_fallback_context(ingredient, "vegan")
+
+        try:
+            sql, params = translate_json_to_sql(json_query)
+            logger.debug(f"Semantic vegan SQL for '{ingredient}': {sql} with params {params}")
+            return execute_sql_query(sql, params)
+        except ValueError as e:
+            logger.error(f"Failed to translate semantic vegan query: {e}")
+            return await self._get_fuzzy_fallback_context(ingredient, "vegan")
+
+    async def _get_fuzzy_fallback_context(self, ingredient: str, context_type: str) -> str:
+        """
+        Fuzzy matching fallback when Arctic semantic search fails.
+        
+        Uses the existing processor's RapidFuzz implementation for backup.
+        """
+        logger.info(f"Using fuzzy fallback for {context_type} context: {ingredient}")
+        
+        try:
+            # Use existing processor for comprehensive fuzzy matching
+            context = processor.process_ingredient_comprehensive(ingredient)
+            
+            if context_type == "nutrition" and context.get("nutrition_data"):
+                return json.dumps([context["nutrition_data"]], indent=2)
+            elif context_type == "vegan" and context.get("vegan_info"): 
+                return json.dumps([context["vegan_info"]], indent=2)
+            else:
+                # Try fuzzy matches if direct lookup failed
+                if context.get("fuzzy_matches"):
+                    best_match = context["fuzzy_matches"][0][0]
+                    logger.info(f"Fuzzy fallback found: '{best_match}' for '{ingredient}'")
+                    
+                    if context_type == "nutrition":
+                        fallback_data = processor.get_nutrition_data(best_match)
+                        return json.dumps([fallback_data] if fallback_data else [], indent=2)
+        else:
+                        fallback_data = processor.get_vegan_info(best_match)
+                        return json.dumps([fallback_data] if fallback_data else [], indent=2)
+                        
+                return "No matching data found in fuzzy fallback."
+                
+        except Exception as e:
+            logger.error(f"Fuzzy fallback failed for '{ingredient}': {e}")
+            return f"Fuzzy fallback error: {e}"
+
     async def _get_cached_ingredient_classification(self, ingredient: str) -> Optional[Dict[str, Any]]:
         """Check cache for existing ingredient classification."""
         if not self.cache_manager.is_available():
             return None
         
-        cache_key = self._generate_ingredient_cache_key(ingredient)
         cached_result = self.cache_manager.get_ingredient_context(ingredient)
         
         if cached_result:
             self.cache_hits += 1
             logger.debug(f"Cache hit for ingredient: {ingredient}")
-            return cached_result.get("context") if isinstance(cached_result, dict) else cached_result
+            return cached_result.get("classification") if isinstance(cached_result, dict) else cached_result
         
         self.cache_misses += 1
         return None
-    
+
     async def _cache_ingredient_classification(self, ingredient: str, result: Dict[str, Any]):
         """Cache ingredient classification result."""
         if not self.cache_manager.is_available():
             return
         
         try:
-            # Add metadata for cache management
             cache_data = {
                 "classification": result,
                 "ingredient": ingredient,
                 "cached_at": time.time(),
-                "cache_version": "2.0"
+                "cache_version": "4.0"  # SOTA semantic version
             }
             
             self.cache_manager.set_ingredient_context(
@@ -115,131 +244,92 @@ class ContextAwareDietClassifier:
                 cache_data,
                 ttl=604800  # 1 week for ingredients
             )
-            logger.debug(f"Cached classification for ingredient: {ingredient}")
+            logger.debug(f"Cached SOTA classification for ingredient: {ingredient}")
             
         except Exception as e:
             logger.warning(f"Failed to cache ingredient classification: {e}")
-    
-    async def _get_cached_recipe_classification(self, ingredients: List[str]) -> Optional[Dict[str, Any]]:
-        """Check cache for existing recipe classification."""
-        if not self.cache_manager.is_available():
-            return None
-        
-        cache_key = self._generate_recipe_cache_key(ingredients)
-        recipe_id = hashlib.md5("|".join(sorted(ingredients)).encode()).hexdigest()
-        
-        cached_result = self.cache_manager.get_classification_result(recipe_id)
-        
-        if cached_result:
-            self.cache_hits += 1
-            logger.debug(f"Cache hit for recipe with {len(ingredients)} ingredients")
-            return cached_result.get("classification") if isinstance(cached_result, dict) else cached_result
-        
-        self.cache_misses += 1
-        return None
-    
-    async def _cache_recipe_classification(self, ingredients: List[str], result: Dict[str, Any]):
-        """Cache recipe classification result."""
-        if not self.cache_manager.is_available():
-            return
-        
-        try:
-            recipe_id = hashlib.md5("|".join(sorted(ingredients)).encode()).hexdigest()
-            
-            # Add metadata for cache management
-            cache_data = {
-                "recipe_classification": result,
-                "ingredients": ingredients,
-                "cached_at": time.time(),
-                "cache_version": "2.0"
-            }
-            
-            self.cache_manager.set_classification_result(
-                recipe_id,
-                cache_data,
-                ttl=86400  # 1 day for recipes
-            )
-            logger.debug(f"Cached classification for recipe with {len(ingredients)} ingredients")
-            
-        except Exception as e:
-            logger.warning(f"Failed to cache recipe classification: {e}")
-
-    async def _get_context_for_ingredient(self, ingredient: str) -> str:
-        """
-        Generates a JSON query, translates it to SQL, and executes it
-        to retrieve context for a single ingredient.
-        """
-        question = f"What are the nutritional values and vegan status for the ingredient: {ingredient}?"
-        
-        # Step 1: LLM generates a structured JSON query
-        json_query = await self.function_handler.generate_json_query(question)
-        if "error" in json_query:
-            error_msg = f"Failed to generate JSON query for '{ingredient}': {json_query['error']}"
-            logger.error(error_msg)
-            return error_msg
-
-        # Step 2: Translate JSON to a safe SQL query
-        try:
-            sql, params = translate_json_to_sql(json_query)
-            logger.debug(f"Translated SQL for '{ingredient}': {sql} with params {params}")
-        except ValueError as e:
-            error_msg = f"Failed to translate JSON to SQL for '{ingredient}': {e}"
-            logger.error(error_msg)
-            return error_msg
-        
-        # Step 3: Execute the SQL query
-        return execute_sql_query(sql, params)
 
     async def classify_single_ingredient(self, ingredient: str) -> Dict[str, Any]:
         """
-        Classifies a single ingredient using cache-first approach.
-        Checks cache before expensive LLM operations.
+        SOTA semantic ingredient classification pipeline.
+        
+        FULL PIPELINE:
+        1. Cache check (performance)
+        2. ingredient-parser: Extract clean name from recipe text
+        3. Arctic Text2SQL: Generate semantic LIKE queries
+        4. Database: Flexible matching with wildcards  
+        5. Fuzzy fallback: RapidFuzz if semantic fails
+        6. Qwen reasoning: Final classification with edge case handling
+        7. Cache result: Future performance
         """
         self.total_requests += 1
-        logger.debug(f"Starting classification for ingredient: {ingredient}")
+        logger.debug(f"Starting SOTA semantic classification for: {ingredient}")
         
         # Step 1: Check cache first
         cached_result = await self._get_cached_ingredient_classification(ingredient)
         if cached_result:
             logger.debug(f"Returning cached result for ingredient: {ingredient}")
-            
-            # Extract classification if nested in cache structure
-            if "classification" in cached_result:
-                return cached_result["classification"]
-            elif "is_keto" in cached_result and "is_vegan" in cached_result:
-                return cached_result
-            else:
-                logger.warning(f"Invalid cached data structure for {ingredient}, proceeding with LLM")
+            return cached_result
         
-        # Step 2: Cache miss - perform LLM classification
-        logger.debug(f"Cache miss - performing LLM classification for: {ingredient}")
+        # Step 2: Extract clean ingredient name
+        clean_ingredient = self.extract_ingredient_name(ingredient)
+        logger.debug(f"Extracted ingredient name: '{ingredient}' → '{clean_ingredient}'")
         
-        retrieved_context = await self._get_context_for_ingredient(ingredient)
+        # Step 3: Parallel semantic context retrieval 
+        logger.debug(f"Cache miss - performing SOTA semantic lookup for: {clean_ingredient}")
+        
+        keto_context, vegan_context = await asyncio.gather(
+            self._get_semantic_keto_context(ingredient),
+            self._get_semantic_vegan_context(ingredient)
+        )
 
-        # Step 3: Use LLM for final classification based on the retrieved context
-        prompt = f"""You are a nutrition expert judging an ingredient based on factual data.
+        # Step 4: Enhanced Qwen reasoning with SOTA prompting
+        prompt = f"""You are an expert nutrition classifier using SOTA semantic search results.
 
-        **Ingredient:**
-        {ingredient}
+**ORIGINAL INGREDIENT:** {ingredient}
+**EXTRACTED NAME:** {clean_ingredient}
 
-        **Data from Knowledge Base:**
-        {retrieved_context}
+**KETO CONTEXT (nutrition_facts semantic search):**
+{keto_context}
 
-        **Your Task:**
-        Analyze the data to classify the ingredient's compliance with keto and vegan diets.
-        - **Keto:** Net carbs (carbohydrate_g - fiber_g) should be low (e.g., <= {app_config.KETO_CARBS_THRESHOLD}g per 100g).
-        - **Vegan:** Must not be an animal product. Check `is_explicitly_non_vegan` flags and look for indicators like `cholesterol_mg > 0`.
+**VEGAN CONTEXT (vegan_ontology semantic search):**
+{vegan_context}
 
-        Provide your final judgment in a valid JSON format.
+**SOTA CLASSIFICATION PROTOCOL:**
 
-        **JSON Output Format:**
-        {{
-          "is_keto": boolean,
-          "is_vegan": boolean,
-          "reasoning": "A brief, evidence-based explanation for your decision.",
-          "confidence": "high | medium | low"
-        }}
-        """
+**KETO RULES:**
+- Carbohydrates ≤ {app_config.KETO_CARBS_THRESHOLD}g per 100g = KETO-FRIENDLY  
+- Use semantic matches prioritizing raw/unprocessed forms
+- If multiple matches, select the most representative base ingredient
+- Handle preparation variants (e.g., "diced tomatoes" = "tomatoes")
+
+**VEGAN RULES:**
+- If vegan_ontology shows is_explicitly_non_vegan=1 → NON-VEGAN
+- Unknown plant ingredients → DEFAULT VEGAN (conservative)
+- Animal products: meat, dairy, eggs, honey, gelatin, animal fat
+- Plant foods: vegetables, fruits, grains, nuts, legumes → VEGAN
+
+**SEMANTIC MATCHING PRIORITY:**
+1. Raw/fresh forms over processed
+2. Basic ingredients over compound foods  
+3. Higher semantic similarity scores
+4. Nutritional representativeness
+
+**EDGE CASE HANDLING:**
+- Compound ingredients: Extract base component
+- Preparation variants: Focus on core ingredient
+- Regional synonyms: Use semantic matching
+- Missing data: Conservative classification
+
+**OUTPUT FORMAT:**
+{{
+  "is_keto": boolean,
+  "is_vegan": boolean,
+  "reasoning": "Detailed evidence citing semantic matches and database findings",
+  "confidence": "high | medium | low",
+  "semantic_match_quality": "excellent | good | poor | fallback",
+  "extracted_ingredient": "{clean_ingredient}"
+}}"""
         
         model_name = "qwen/qwen3-0.6b-gguf:q8_0"
         if not self.llm_client.is_model_available(model_name):
@@ -248,7 +338,7 @@ class ContextAwareDietClassifier:
 
         result = await self.llm_client.query_async(model_name, prompt, as_json=True)
         
-        # Step 4: Cache the result for future use
+        # Step 5: Cache the result for future use
         if "error" not in result:
             await self._cache_ingredient_classification(ingredient, result)
         
@@ -256,58 +346,67 @@ class ContextAwareDietClassifier:
 
     async def classify_recipe(self, ingredients: List[str]) -> Dict[str, Any]:
         """
-        Classifies an entire recipe using cache-first approach.
-        Checks for cached recipe results before processing individual ingredients.
+        SOTA recipe classification with comprehensive semantic analysis.
         """
         self.total_requests += 1
-        logger.debug(f"Starting recipe classification for {len(ingredients)} ingredients")
+        logger.debug(f"Starting SOTA recipe classification for {len(ingredients)} ingredients")
         
-        # Step 1: Check for cached recipe result
-        cached_recipe = await self._get_cached_recipe_classification(ingredients)
-        if cached_recipe:
-            logger.debug(f"Returning cached recipe result for {len(ingredients)} ingredients")
-            
-            # Extract recipe classification if nested
-            if "recipe_classification" in cached_recipe:
-                return cached_recipe["recipe_classification"]
-            elif "recipe_is_keto" in cached_recipe and "recipe_is_vegan" in cached_recipe:
-                return cached_recipe
-            else:
-                logger.warning(f"Invalid cached recipe data structure, proceeding with classification")
-        
-        # Step 2: Cache miss - classify individual ingredients
-        logger.debug(f"Cache miss - performing ingredient-by-ingredient classification")
-        
+        # Parallel classification of all ingredients
         classifications = await asyncio.gather(
             *(self.classify_single_ingredient(ing) for ing in ingredients)
         )
         
         recipe_is_keto = True
         recipe_is_vegan = True
-        full_reasoning = []
+        ingredient_details = []
+        semantic_quality_stats = {"excellent": 0, "good": 0, "poor": 0, "fallback": 0}
         
         for i, result in enumerate(classifications):
             ingredient = ingredients[i]
+            
             if "error" in result:
-                # If any ingredient fails, the whole recipe is conservatively marked as non-compliant
                 recipe_is_keto = False
                 recipe_is_vegan = False
-                full_reasoning.append(f"{ingredient}: Classification failed - {result['error']}")
+                ingredient_details.append({
+                    "ingredient": ingredient,
+                    "error": result.get("error", "Unknown error"),
+                    "is_keto": False,
+                    "is_vegan": False
+                })
                 continue
 
-            if not result.get("is_keto", False):
-                recipe_is_keto = False
-            if not result.get("is_vegan", False):
-                recipe_is_vegan = False
+            # Extract classification results
+            is_keto = result.get("is_keto", False)
+            is_vegan = result.get("is_vegan", False)
+            semantic_quality = result.get("semantic_match_quality", "unknown")
             
-            full_reasoning.append(f"{ingredient}: {result.get('reasoning', 'No reasoning provided.')}")
+            if semantic_quality in semantic_quality_stats:
+                semantic_quality_stats[semantic_quality] += 1
+            
+            ingredient_details.append({
+                "ingredient": ingredient,
+                "extracted_name": result.get("extracted_ingredient", ""),
+                "is_keto": is_keto,
+                "is_vegan": is_vegan,
+                "reasoning": result.get("reasoning", ""),
+                "confidence": result.get("confidence", "medium"),
+                "semantic_quality": semantic_quality
+            })
+            
+            # Recipe fails if any ingredient fails
+            if not is_keto:
+                recipe_is_keto = False
+            if not is_vegan:
+                recipe_is_vegan = False
         
-        # Step 3: Compile final recipe result
+        # Compile comprehensive result
         recipe_result = {
             "recipe_is_keto": recipe_is_keto,
             "recipe_is_vegan": recipe_is_vegan,
-            "ingredient_analysis": classifications,
-            "summary_reasoning": " ".join(full_reasoning),
+            "ingredient_count": len(ingredients),
+            "successful_classifications": len([d for d in ingredient_details if "error" not in d]),
+            "semantic_quality_distribution": semantic_quality_stats,
+            "ingredient_analysis": ingredient_details,
             "cache_performance": {
                 "total_requests": self.total_requests,
                 "cache_hits": self.cache_hits,
@@ -316,51 +415,61 @@ class ContextAwareDietClassifier:
             }
         }
         
-        # Step 4: Cache the recipe result
-        await self._cache_recipe_classification(ingredients, recipe_result)
-        
         return recipe_result
     
     def get_performance_stats(self) -> Dict[str, Any]:
-        """Get cache performance statistics."""
+        """Get comprehensive performance statistics."""
         return {
             "total_requests": self.total_requests,
             "cache_hits": self.cache_hits,
             "cache_misses": self.cache_misses,
             "cache_hit_rate": self.cache_hits / self.total_requests if self.total_requests > 0 else 0,
-            "cache_available": self.cache_manager.is_available()
+            "cache_available": self.cache_manager.is_available(),
+            "ingredient_parser_available": INGREDIENT_PARSER_AVAILABLE
         }
 
+# For backward compatibility
+ContextAwareDietClassifier = SOTASemanticClassifier
+
 if __name__ == '__main__':
-    async def test_cache_aware_classifier():
-        classifier = ContextAwareDietClassifier()
+    async def test_sota_semantic_classifier():
+        classifier = SOTASemanticClassifier()
 
-        # Test 1: Single ingredient (should cache)
-        print("\n--- Testing Single Ingredient: Chicken Breast (First Call) ---")
-        start_time = time.time()
-        result1 = await classifier.classify_single_ingredient("100g chicken breast")
-        first_call_time = time.time() - start_time
-        print(json.dumps(result1, indent=2))
-        print(f"First call time: {first_call_time:.2f}s")
+        # Test realistic recipe ingredients that need semantic matching
+        test_ingredients = [
+            "3 pounds pork shoulder, cut into chunks",  # Should find "pork" semantically
+            "2 tbsp extra virgin olive oil",            # Should find "olive oil"  
+            "1 cup diced tomatoes",                     # Should find "tomatoes"
+            "100g fresh spinach leaves",                # Should find "spinach, raw"
+            "2 cups whole milk",                        # Should find milk products
+            "1 lb ground beef, 80/20"                   # Should find beef variants
+        ]
 
-        # Test 2: Same ingredient (should hit cache)
-        print("\n--- Testing Same Ingredient: Chicken Breast (Second Call) ---")
-        start_time = time.time()
-        result2 = await classifier.classify_single_ingredient("100g chicken breast")
-        second_call_time = time.time() - start_time
-        print(json.dumps(result2, indent=2))
-        print(f"Second call time: {second_call_time:.2f}s")
-        print(f"Speed improvement: {first_call_time / second_call_time:.1f}x faster")
+        print("=== TESTING SOTA SEMANTIC CLASSIFIER ===")
         
-        # Test 3: Full Recipe
-        recipe = ["100g chicken breast", "50g spinach", "1 tbsp olive oil"]
-        print(f"\n--- Testing Recipe: {recipe} ---")
+        for ingredient in test_ingredients:
+            print(f"\n--- Testing: {ingredient} ---")
+            start_time = time.time()
+            result = await classifier.classify_single_ingredient(ingredient)
+            end_time = time.time()
+            
+            print(json.dumps(result, indent=2))
+            print(f"Classification time: {end_time - start_time:.2f}s")
+        
+        # Test complete recipe
+        print(f"\n--- Testing Complete Recipe ---")
+        recipe = [
+            "3 pounds pork shoulder, cut into chunks", 
+            "2 tbsp extra virgin olive oil",
+            "1 cup diced tomatoes",
+            "100g fresh spinach leaves"
+        ]
         recipe_result = await classifier.classify_recipe(recipe)
         print(json.dumps(recipe_result, indent=2))
         
-        # Test 4: Performance stats
-        print("\n--- Cache Performance Stats ---")
+        # Performance stats
+        print("\n--- SOTA Performance Stats ---")
         stats = classifier.get_performance_stats()
         print(json.dumps(stats, indent=2))
 
-    asyncio.run(test_cache_aware_classifier()) 
+    asyncio.run(test_sota_semantic_classifier()) 
