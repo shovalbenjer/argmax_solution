@@ -61,8 +61,8 @@ services:
 
   web:
     build:
-      context: ./web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: web/Dockerfile
     container_name: web
     ports:
       - "8080:8080"
@@ -80,8 +80,8 @@ services:
 
   nb:
     build:
-      context: ./nb
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: nb/Dockerfile
     container_name: nb
     ports:
       - "8888:8888"

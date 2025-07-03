@@ -26,3 +26,5 @@ plotly
 wordcloud
 nltk
 google-generativeai
+deepeval
+seaborn

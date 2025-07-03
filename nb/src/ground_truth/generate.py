@@ -1,16 +1,8 @@
-"""
-SOTA Diet Classifier - Ground Truth Generation (V19 - Final Production)
+"""SOTA Diet Classifier - Ground Truth Generation.
 
-This script implements the definitive, most robust pipeline for ground truth generation.
-This version includes the final fix to flatten nested list columns before saving to CSV,
-preventing the 'ComputeError: CSV format does not support nested data' error.
-
-- Stage 1: A specialized Vegan Classifier runs on all recipes.
-- Stage 2: A specialized Keto Classifier runs on all recipes.
-- Each classifier uses a Chain-of-Thought and Self-Critique prompt design.
-- The results from both stages are merged into a single, comprehensive output file.
-
-Author: Argmax Challenge Implementation
+This script generates ground truth data for diet classification.
+It uses specialized Vegan and Keto classifiers with Chain-of-Thought and Self-Critique prompting.
+Results from both stages are merged into a comprehensive output file.
 """
 
 import os
@@ -35,7 +27,8 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 # --- Local Module Imports ---
 # Assumes the script is run with the `src` directory in the Python path.
-from llm_handler.handler import LLMHandler
+# from llm_handler.handler import LLMHandler
+from context_aware_classifier import ContextAwareDietClassifier
 from ingredient_processor.processor import get_context_with_rapidfuzz_fallback
 
 load_dotenv()
@@ -69,17 +62,13 @@ class AsyncTokenBucket:
     """Manages API rate limiting for asynchronous requests using a token bucket algorithm.
 
     Detailed Description:
-        - This class ensures that requests to an API do not exceed specified rate limits (requests per minute and tokens per minute).
-        - It uses an asyncio.Lock to handle concurrent access safely.
-        - When a request is made, it checks if the limits have been reached. If so, it calculates the required delay and sleeps asynchronously before allowing the request to proceed.
+        - Ensures API requests do not exceed specified rate limits (RPM and TPM).
+        - Uses `asyncio.Lock` for safe concurrent access.
+        - Calculates and applies asynchronous delays when limits are reached.
 
     Parameters:
-        - rpm_rate (int): The maximum number of requests allowed per minute.
-        - tpm_rate (int): The maximum number of tokens allowed per minute.
-
-    Libraries Used:
-        - asyncio: Used for asynchronous locking and sleeping, which is essential for non-blocking rate limiting in an async environment.
-        - time: Used to track the passage of time for resetting the rate limit counters.
+        - rpm_rate (int): Maximum requests per minute.
+        - tpm_rate (int): Maximum tokens per minute.
     """
     def __init__(self, rpm_rate: int, tpm_rate: int):
         self.rpm_rate = rpm_rate
@@ -113,18 +102,15 @@ def build_vegan_prompt(recipe_rows: List[Dict[str, Any]]) -> list:
     """Builds a prompt for the generative AI to classify recipes as vegan.
 
     Detailed Description:
-        - This function takes a list of recipe data and formats it into a detailed prompt for a generative AI model.
-        - The prompt instructs the AI to act as a food scientist and determine if each recipe is strictly vegan.
-        - It specifies a chain-of-thought process for the AI to follow and the exact JSON output format required.
+        - Formats recipe data into a detailed prompt for a generative AI model.
+        - Instructs the AI to act as a food scientist and classify recipes as strictly vegan.
+        - Specifies a chain-of-thought process and required JSON output format.
 
     Parameters:
         - recipe_rows (List[Dict[str, Any]]): A list of dictionaries, where each dictionary represents a recipe.
 
     Returns:
-        - list: A list containing the user prompt and the desired JSON schema for the AI's response.
-
-    Libraries Used:
-        - json: Used to serialize the recipe data into a JSON string, which is embedded in the prompt. This is a standard and lightweight way to represent structured data.
+        - list: A list containing the user prompt and the desired JSON schema.
     """
     recipe_data_list = [{"recipe_id": r.get('_id'), "title": r.get('title'), "ingredients": json.loads(r.get('ingredients', '[]'))} for r in recipe_rows]
     user_prompt = f"""
@@ -151,18 +137,16 @@ def build_keto_prompt(recipe_rows: List[Dict[str, Any]]) -> list:
     """Builds a prompt for the generative AI to classify recipes as keto-friendly.
 
     Detailed Description:
-        - This function constructs a prompt for a generative AI model to determine if recipes are keto-friendly.
-        - The prompt defines "strictly keto" based on carbohydrate content and instructs the AI to use its own knowledge to override potentially incorrect information in the provided data.
-        - It specifies a JSON output format for consistency.
+        - Constructs a prompt for a generative AI model to determine if recipes are keto-friendly.
+        - Defines "strictly keto" based on carbohydrate content.
+        - Instructs the AI to use its own knowledge to override incorrect information.
+        - Specifies a JSON output format.
 
     Parameters:
         - recipe_rows (List[Dict[str, Any]]): A list of dictionaries, where each dictionary represents a recipe.
 
     Returns:
-        - list: A list containing the user prompt and the desired JSON schema for the AI's response.
-
-    Libraries Used:
-        - json: Used to serialize the recipe data into a JSON string for the prompt.
+        - list: A list containing the user prompt and the desired JSON schema.
     """
     recipe_data_list = []
     for row in recipe_rows:
@@ -206,26 +190,22 @@ async def classify_recipes(
     """Classifies a batch of recipes using a generative AI model.
 
     Detailed Description:
-        - This asynchronous function sends a request to the configured generative AI model.
-        - It acquires a slot from the `AsyncTokenBucket` to respect rate limits.
-        - It builds the prompt using the provided `prompt_builder`, sends it to the model, and parses the JSON response.
-        - It includes error handling for API calls.
+        - Sends a request to the configured generative AI model.
+        - Acquires a slot from the `AsyncTokenBucket` to respect rate limits.
+        - Builds the prompt, sends it to the model, and parses the JSON response.
+        - Includes error handling for API calls.
 
     Parameters:
         - recipes (List[Dict[str, Any]]): The list of recipes to classify.
         - model_name (str): The name of the generative AI model to use.
-        - rate_limiter (AsyncTokenBucket): The rate limiter instance to manage API calls.
-        - prompt_builder (Callable): The function to use for building the classification prompt.
+        - rate_limiter (AsyncTokenBucket): The rate limiter instance.
+        - prompt_builder (Callable): The function for building the classification prompt.
 
     Returns:
         - Optional[List[Dict[str, Any]]]: A list of classification results, or None if the API call fails.
 
     Raises:
         - Exception: Catches and logs any exception during the API call, returning None.
-
-    Libraries Used:
-        - google.generativeai: The official Google AI SDK for Python. It's used to interact with Gemini models.
-        - asyncio: Used for the `await` keyword, making the function non-blocking.
     """
     if not recipes: return []
     estimated_tokens = (800 + 200) * len(recipes)
@@ -243,9 +223,30 @@ async def classify_recipes(
         response = await gemini_model.generate_content_async(prompt, generation_config=generation_config, safety_settings=safety_settings)
         return json.loads(response.text)
     except Exception as e:
-        logging.warning(f"💥 API call failed for model {model_name} with {len(recipes)} recipes: {e}")
+        logging.warning(f"API call failed for model {model_name} with {len(recipes)} recipes: {e}")
         return None
 
+# Add Arctic integration for nutritional queries
+async def enrich_with_sql_context(recipe: Dict, sql_handler) -> Dict:
+    """Enrich recipe with SQL-generated nutritional context."""
+    enriched_ingredients = []
+    
+    for ingredient in recipe["ingredients"]:
+        # Query nutrition data
+        nutrition_q = f"SELECT * FROM nutrition_facts WHERE name LIKE '%{ingredient}%'"
+        vegan_q = f"SELECT * FROM vegan_ontology WHERE term LIKE '%{ingredient}%'"
+        
+        nutrition_data = execute_sql_query(nutrition_q)
+        vegan_data = execute_sql_query(vegan_q)
+        
+        enriched_ingredients.append({
+            "name": ingredient,
+            "nutrition": nutrition_data,
+            "vegan_info": vegan_data
+        })
+    
+    recipe["enriched_context"] = enriched_ingredients
+    return recipe
 
 async def worker(
     name: str,
@@ -259,23 +260,18 @@ async def worker(
     """An asynchronous worker that processes recipe classification tasks from a queue.
 
     Detailed Description:
-        - This function runs in a loop, getting batches of recipes from an `asyncio.Queue`.
-        - For each batch, it calls `classify_recipes`. If the batch fails, it retries each recipe individually.
-        - It updates a `tqdm` progress bar.
+        - Processes batches of recipes from an `asyncio.Queue`.
+        - Calls `classify_recipes` for each batch, retrying individual recipes on failure.
+        - Updates a `tqdm` progress bar.
 
     Parameters:
-        - name (str): The name of the worker (for logging).
-        - model_name (str): The model to use for classification.
-        - rate_limiter (AsyncTokenBucket): The rate limiter for the API.
-        - batch_queue (asyncio.Queue): The queue from which to fetch recipe batches.
-        - results_list (List[Dict[str, Any]]): A list to store the classification results.
-        - pbar (tqdm): The progress bar to update.
-        - prompt_builder (Callable): The function for building prompts.
-
-    Libraries Used:
-        - asyncio: For managing the asynchronous worker loop and queue.
-        - tqdm: Provides a progress bar for monitoring the classification process.
-        - logging: For logging warnings and errors.
+        - name (str): Worker name (for logging).
+        - model_name (str): Model to use for classification.
+        - rate_limiter (AsyncTokenBucket): API rate limiter.
+        - batch_queue (asyncio.Queue): Queue to fetch recipe batches from.
+        - results_list (List[Dict[str, Any]]): List to store classification results.
+        - pbar (tqdm): Progress bar to update.
+        - prompt_builder (Callable): Function for building prompts.
     """
     while True:
         batch_id, batch_recipes_gen = await batch_queue.get()
@@ -305,25 +301,20 @@ async def run_classification_stage(df: pl.DataFrame, prompt_builder: Callable, s
     """Runs a complete classification stage for a given diet.
 
     Detailed Description:
-        - This function orchestrates a classification stage (e.g., "Vegan").
-        - It creates a queue of recipe batches and a pool of worker tasks.
-        - Each worker uses a different model from the `MODELS_QUOTAS` configuration, allowing for parallel processing with different rate limits.
-        - It gathers the results from all workers and returns them as a Polars DataFrame.
+        - Orchestrates a classification stage (e.g., "Vegan").
+        - Creates a queue of recipe batches and a pool of worker tasks.
+        - Workers use different models with varying rate limits for parallel processing.
+        - Gathers results from all workers and returns them as a Polars DataFrame.
 
     Parameters:
-        - df (pl.DataFrame): The input DataFrame of recipes.
-        - prompt_builder (Callable): The function to build the prompt for this stage.
-        - stage_name (str): The name of the stage (e.g., "Vegan", "Keto") for logging.
+        - df (pl.DataFrame): Input DataFrame of recipes.
+        - prompt_builder (Callable): Function to build the prompt for this stage.
+        - stage_name (str): Name of the stage (e.g., "Vegan", "Keto") for logging.
 
     Returns:
-        - pl.DataFrame: A DataFrame containing the classification results for the stage.
-
-    Libraries Used:
-        - asyncio: To create and manage the worker tasks concurrently.
-        - polars: For efficient data manipulation and DataFrame creation.
-        - tqdm: To display an overall progress bar for the stage.
+        - pl.DataFrame: DataFrame containing classification results.
     """
-    logging.info(f"🚀 Starting Stage: {stage_name} Classification...")
+    logging.info(f"Starting Stage: {stage_name} Classification...")
     work_queue = asyncio.Queue()
     all_results = []
     for i in range(0, len(df), CONFIG["BATCH_SIZE"]):
@@ -341,7 +332,7 @@ async def run_classification_stage(df: pl.DataFrame, prompt_builder: Callable, s
         await work_queue.join()
         await asyncio.gather(*worker_tasks)
     if not all_results:
-        logging.error(f"❌ No results were generated for stage {stage_name}.")
+        logging.error(f"No results were generated for stage {stage_name}.")
         return pl.DataFrame()
     return pl.DataFrame(all_results)
 
@@ -370,64 +361,36 @@ def fetch_recipes_synchronously(os_client: OpenSearch) -> List[Dict]:
     return response['hits']['hits']
 
 
-async def classify_batch(batch: List[Dict], llm: LLMHandler, rate_limiter: AsyncTokenBucket) -> List[Dict]:
-    """Classifies a batch of recipes using the LLM handler.
-    
-    This function processes a batch of recipes through both vegan and keto classification
-    using the Ollama-based LLM handler, then merges the results.
-    """
+async def classify_batch(batch: List[Dict], classifier: ContextAwareDietClassifier, rate_limiter: AsyncTokenBucket) -> List[Dict]:
+    """Classifies a batch of recipes using the LLM handler for both vegan and keto classifications."""
     try:
         results = []
-        
         for recipe in batch:
-            # Extract recipe data
             recipe_id = recipe.get("recipe_id")
             ingredients = json.loads(recipe.get("ingredients", "[]"))
-            context = json.loads(recipe.get("processed_context", "[]"))
+            title = recipe.get("title", "Unknown Recipe")
             
-            # Create classification prompts
-            vegan_prompt = f"""
-            Analyze this recipe for vegan compliance. A recipe is vegan if it contains NO animal products.
+            # Use the new context-aware classifier
+            llm_classification_result = await classifier.classify_with_context(ingredients, title)
             
-            Recipe: {recipe.get('title', 'Unknown')}
-            Ingredients: {ingredients}
-            Context: {context}
-            
-            Respond with JSON: {{"is_vegan": boolean, "vegan_reasoning": "explanation", "animal_ingredients_found": ["list"]}}
-            """
-            
-            keto_prompt = f"""
-            Analyze this recipe for keto compliance. A recipe is keto if it has very low carbohydrates (<10g per 100g).
-            
-            Recipe: {recipe.get('title', 'Unknown')}
-            Ingredients: {ingredients}
-            Context: {context}
-            
-            Respond with JSON: {{"is_keto": boolean, "keto_reasoning": "explanation", "high_carb_ingredients_found": ["list"]}}
-            """
-            
-            # Get classifications using fallback model (Gemma3-1B)
-            vegan_result = await llm.async_query("gemma3:1b", vegan_prompt, as_json=True)
-            keto_result = await llm.async_query("gemma3:1b", keto_prompt, as_json=True)
-            
-            # Merge results
             merged_result = {
                 "recipe_id": recipe_id,
-                "title": recipe.get('title', 'Unknown'),
-                "ingredients": ingredients
+                "title": title,
+                "ingredients": ingredients # Keep ingredients as a JSON string for consistency in output
             }
             
-            # Add vegan results
-            if isinstance(vegan_result, dict) and not vegan_result.get("error"):
-                merged_result.update(vegan_result)
+            # Add classification results
+            if llm_classification_result:
+                merged_result["is_vegan"] = llm_classification_result.get("is_vegan", False)
+                merged_result["vegan_reasoning"] = llm_classification_result.get("reasoning", "No specific vegan reasoning provided.")
+                merged_result["animal_ingredients_found"] = [] # The new model integrates this into reasoning
+                
+                merged_result["is_keto"] = llm_classification_result.get("is_keto", False)
+                merged_result["keto_reasoning"] = llm_classification_result.get("reasoning", "No specific keto reasoning provided.")
+                merged_result["high_carb_ingredients_found"] = [] # The new model integrates this into reasoning
             else:
-                merged_result.update({"is_vegan": False, "vegan_reasoning": "Error in classification", "animal_ingredients_found": []})
-            
-            # Add keto results
-            if isinstance(keto_result, dict) and not keto_result.get("error"):
-                merged_result.update(keto_result)
-            else:
-                merged_result.update({"is_keto": False, "keto_reasoning": "Error in classification", "high_carb_ingredients_found": []})
+                merged_result.update({"is_vegan": False, "vegan_reasoning": "Classification failed", "animal_ingredients_found": []})
+                merged_result.update({"is_keto": False, "keto_reasoning": "Classification failed", "high_carb_ingredients_found": []})
                 
             results.append(merged_result)
             
@@ -439,15 +402,15 @@ async def classify_batch(batch: List[Dict], llm: LLMHandler, rate_limiter: Async
 
 
 async def classify_and_log_async(processed_recipes: List[Dict]):
-    """Runs the asynchronous classification and MLflow logging part of the pipeline."""
-    llm = LLMHandler()
+    """Runs the asynchronous classification and MLflow logging pipeline."""
+    classifier = ContextAwareDietClassifier()
     rate_limiter = AsyncTokenBucket(CONFIG["RPM_LIMIT"], CONFIG["TPM_LIMIT"])
     
     # Run Classification
     tasks = []
     for i in range(0, len(processed_recipes), CONFIG["BATCH_SIZE"]):
         batch = processed_recipes[i:i + CONFIG["BATCH_SIZE"]]
-        tasks.append(classify_batch(batch, llm, rate_limiter))
+        tasks.append(classify_batch(batch, classifier, rate_limiter))
         
     all_results = []
     for result in await tqdm_asyncio.gather(*tasks, desc="Classifying Batches"):
@@ -465,13 +428,14 @@ async def classify_and_log_async(processed_recipes: List[Dict]):
         
         final_data = []
         for res in all_results:
-            flat_res = {"recipe_id": res.get("recipe_id")}
-            violations = res.get("violations", {})
-            for k, v in violations.items():
-                flat_res[f"violations_{k}"] = ", ".join(v)
+            # Flatten lists before saving to CSV
+            flat_res = {"recipe_id": res.get("recipe_id"), "title": res.get("title")}
             for k, v in res.items():
-                if k not in ["recipe_id", "violations"]:
-                    flat_res[k] = v
+                if k not in ["recipe_id", "title"]:
+                    if isinstance(v, list):
+                        flat_res[k] = ", ".join(map(str, v))
+                    else:
+                        flat_res[k] = v
             final_data.append(flat_res)
             
         final_df = pl.DataFrame(final_data)
@@ -480,7 +444,7 @@ async def classify_and_log_async(processed_recipes: List[Dict]):
             output_path = CONFIG["OUTPUT_DIR"] / CONFIG["GROUND_TRUTH_FILENAME"]
             final_df.write_csv(output_path)
             mlflow.log_artifact(str(output_path), "generated_datasets")
-            logger.success(f"✅ Ground truth generation complete. Saved to {output_path}")
+            logger.success(f"Ground truth generation complete. Saved to {output_path}")
         else:
             logger.warning("No results were generated. Skipping artifact logging.")
 
@@ -488,31 +452,49 @@ async def classify_and_log_async(processed_recipes: List[Dict]):
 def main():
     """Main execution block, orchestrating synchronous and asynchronous parts."""
     logger.info("🚀 Starting SOTA Personas Ground Truth Generation Pipeline...")
-    
-    # --- Synchronous Part: Connect, Wait, and Fetch Data ---
+
+    # Connect, Wait, and Fetch Data
     os_client = OpenSearch(hosts=[CONFIG["OPENSEARCH_URL"]])
     if not os_client.ping() or not wait_for_index(os_client, "recipes"):
+        logger.error("OpenSearch is not available. Exiting.")
         return
 
     recipes_hits = fetch_recipes_synchronously(os_client)
-    
-    processed_recipes = []
-    for hit in tqdm(recipes_hits, desc="Enriching Recipes"):
-        source = hit['_source']
-        ingredients = source.get('ingredients', [])
-        if not ingredients or not isinstance(ingredients, list): continue
-        context = [get_context_with_rapidfuzz_fallback(ing) for ing in ingredients]
-        processed_recipes.append({
-            "recipe_id": hit['_id'],
-            "title": source.get('title'),
-            "ingredients": json.dumps(ingredients),
-            "instructions_list": source.get('instructions', []),
-            "processed_context": json.dumps(context)
-        })
+    recipes_df = pl.DataFrame([hit['_source'] for hit in recipes_hits])
+    recipes_df = recipes_df.with_columns(pl.Series(name="recipe_id", values=[hit['_id'] for hit in recipes_hits]))
 
-    # --- Asynchronous Part ---
-    if processed_recipes:
-        asyncio.run(classify_and_log_async(processed_recipes))
+
+    async def run_stages():
+        # Run Teacher Model Classification Stages
+        vegan_results_df = await run_classification_stage(recipes_df, build_vegan_prompt, "Vegan")
+        
+        keto_results_df = await run_classification_stage(recipes_df, build_keto_prompt, "Keto")
+
+        # Merge results and save
+        if not vegan_results_df.is_empty() and not keto_results_df.is_empty():
+            # Merge results on recipe_id
+            final_df = vegan_results_df.join(keto_results_df, on="recipe_id", how="outer")
+
+            # Flatten list columns for CSV writing
+            for col in final_df.columns:
+                if final_df[col].dtype == pl.List:
+                    final_df = final_df.with_columns(pl.col(col).list.join(", ").alias(col))
+            
+            output_path = CONFIG["OUTPUT_DIR"] / CONFIG["GROUND_TRUTH_FILENAME"]
+            final_df.write_csv(output_path)
+            logger.success(f"✅ Ground truth generation complete. Saved to {output_path}")
+
+            # MLflow Logging
+            mlflow.set_tracking_uri(CONFIG["MLFLOW_TRACKING_URI"])
+            with mlflow.start_run(run_name="SOTA Personas Ground Truth Generation") as run:
+                logger.info(f"MLflow run started: {run.info.run_id}")
+                mlflow.log_params(CONFIG)
+                mlflow.log_artifact(str(output_path), "generated_datasets")
+        else:
+            logger.error("Classification stages failed. No data to save.")
+
+    # Run the async stages
+    asyncio.run(run_stages())
 
 
 if __name__ == "__main__":

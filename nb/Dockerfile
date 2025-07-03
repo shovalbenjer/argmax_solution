@@ -23,13 +23,11 @@ USER $NB_UID
 RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_sample.csv -o /usr/src/app/data/ground_truth_sample.csv
 
 # Install Python dependencies using pip for stability
-COPY --chown=$NB_UID:$NB_GID requirements.txt .
-COPY --chown=$NB_UID:$NB_GID ../shared/requirements.txt shared-requirements.txt
-RUN pip install --no-cache-dir -r shared-requirements.txt -r requirements.txt
+COPY --chown=$NB_UID:$NB_GID nb/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy shared modules and project files
-COPY --chown=$NB_UID:$NB_GID ../shared/ /usr/src/shared/
-COPY --chown=$NB_UID:$NB_GID . .
+# Copy project files (no shared dependency)
+COPY --chown=$NB_UID:$NB_GID nb/ .
 RUN pip install -e .
 
 # Download NLTK data

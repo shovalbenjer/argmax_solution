@@ -1,15 +1,9 @@
-"""
-Performance Test Suite for Recipe Classification System
+"""Performance Test Suite for Recipe Classification System.
 
-This script performs comprehensive performance testing on 5,000 random recipe samples,
+This script performs comprehensive performance testing on recipe classification,
 measuring throughput, accuracy, and system performance metrics.
 
-Phase 3.2: Performance Test on 5,000 Random Samples
-- Fetches 5,000 random recipes from available data sources
-- Runs classify_recipe function on each sample
-- Measures execution time and calculates throughput
-- Displays distribution of predictions
-- Generates performance report with visualizations
+It fetches random recipe samples, classifies them, and generates a performance report with visualizations.
 """
 
 import time
@@ -24,22 +18,18 @@ from typing import List, Dict, Any
 import json
 from collections import Counter
 import polars as pl
+import sys
 
-# Performance metrics
+from diet_classifiers import is_keto, is_vegan
+from database import db_manager
+
 class PerformanceMetrics:
     """A container for collecting and calculating performance metrics during a test run.
 
     Detailed Description:
-        - This class provides a structured way to manage metrics for a performance test.
-        - It includes methods to handle timing (start, end, and individual recipe times),
-          and to collect predictions and errors.
-        - It also contains methods to calculate summary statistics like total time,
-          average time, and throughput.
+        - Manages timing (start, end, individual recipe times) and collects predictions and errors.
+        - Calculates summary statistics like total time, average time, and throughput.
 
-    Libraries Used:
-        - numpy: Used for calculating the mean of recipe processing times. It's a standard and
-          efficient library for numerical operations in Python.
-        - time: Used for basic timing operations.
     """
     def __init__(self):
         self.start_time = None
@@ -74,15 +64,38 @@ class PerformanceMetrics:
         total_time = self.get_total_time()
         return len(self.recipe_times) / total_time if total_time > 0 else 0
 
+def classify_recipe_with_rules(recipe: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Classifies a recipe using the fast, rule-based classifiers from the shared module.
+    This is used for high-throughput performance testing.
+    """
+    ingredients_str = recipe.get("ingredients", "[]")
+    
+    # Ensure ingredients are a list of strings
+    try:
+        if isinstance(ingredients_str, str):
+            ingredients_list = json.loads(ingredients_str)
+        else:
+            ingredients_list = ingredients_str
+    except (json.JSONDecodeError, TypeError):
+        ingredients_list = []
+
+    is_vegan_result = is_vegan(ingredients_list)
+    is_keto_result = is_keto(ingredients_list)
+
+    return {
+        "recipe_title": recipe.get("title"),
+        "is_vegan": is_vegan_result,
+        "is_keto": is_keto_result,
+    }
+
 def load_random_recipes(n_samples: int = 5000) -> List[Dict[str, Any]]:
     """Loads a specified number of random recipes for testing.
 
     Detailed Description:
-        - This function is responsible for sourcing the data for the performance test.
-        - It first attempts to load recipes from a primary ground truth CSV file.
-        - If the number of loaded recipes is less than `n_samples`, it proceeds to generate
-          synthetic recipes using a base list of ingredients from a nutrition CSV file.
-        - This hybrid approach ensures that the test can run even if the primary data source is small.
+        - Sources data for the performance test.
+        - Attempts to load recipes from a primary ground truth CSV file.
+        - Generates synthetic recipes if needed, using a base list of ingredients from a nutrition CSV file.
 
     Parameters:
         - n_samples (int): The target number of random recipes to load.
@@ -90,12 +103,6 @@ def load_random_recipes(n_samples: int = 5000) -> List[Dict[str, Any]]:
     Returns:
         - List[Dict[str, Any]]: A list of dictionaries, where each dictionary represents a recipe.
 
-    Libraries Used:
-        - polars: A fast DataFrame library used for reading the CSV files. It is chosen over
-          pandas here for its potential performance advantages in I/O operations.
-        - pandas: Used to convert a polars DataFrame to a list of names for synthetic data generation.
-        - random: For selecting random samples and templates for synthetic data.
-        - loguru: For logging the progress of data loading.
     """
     logger.info(f"Loading {n_samples} random recipes from available sources...")
     
@@ -126,7 +133,7 @@ def load_random_recipes(n_samples: int = 5000) -> List[Dict[str, Any]]:
             }
             all_recipes.append(recipe)
     
-    # If we need more recipes, generate synthetic ones based on nutrition data
+    # If more recipes are needed, generate synthetic ones
     if len(all_recipes) < n_samples:
         nutrition_path = Path("nb/src/raw_data/nutrition.csv")
         if nutrition_path.exists():
@@ -165,111 +172,42 @@ def load_random_recipes(n_samples: int = 5000) -> List[Dict[str, Any]]:
     logger.info(f"Successfully loaded {len(all_recipes)} recipes for performance testing")
     return all_recipes
 
-def mock_classify_recipe(recipe: Dict[str, Any]) -> Dict[str, Any]:
-    """Simulates the recipe classification function for performance testing.
-
-    Detailed Description:
-        - This function acts as a stand-in for the actual, potentially slow, `classify_recipe` function.
-        - It introduces a small, random delay to mimic the processing time (latency) of a real model inference.
-        - It uses a simple, rule-based heuristic based on keywords in the recipe's title and ingredients
-          to generate a plausible-looking classification (vegan/keto).
-        - This allows for testing the throughput and performance of the overall system without the
-          computational expense or variability of a real ML model.
-
-    Parameters:
-        - recipe (Dict[str, Any]): A dictionary representing the recipe to be classified.
-
-    Returns:
-        - Dict[str, Any]: A dictionary containing the mock classification results, including confidence scores
-          and the simulated processing time.
-    """
-    # Simulate processing time (actual classifier would take time for inference)
-    time.sleep(random.uniform(0.001, 0.005))  # 1-5ms per recipe
-    
-    # Mock classification logic based on ingredients
-    ingredients_str = str(recipe.get("ingredients", "")).lower()
-    title = recipe.get("title", "").lower()
-    
-    # Simple heuristic for mock classification
-    vegan_indicators = ["vegetable", "fruit", "bean", "rice", "pasta", "salad", "vegan"]
-    keto_indicators = ["meat", "fish", "cheese", "egg", "butter", "oil", "avocado"]
-    non_keto_indicators = ["bread", "flour", "sugar", "pasta", "rice", "potato"]
-    
-    # Calculate scores
-    vegan_score = sum(1 for indicator in vegan_indicators 
-                     if indicator in ingredients_str or indicator in title)
-    keto_score = sum(1 for indicator in keto_indicators 
-                    if indicator in ingredients_str or indicator in title)
-    non_keto_score = sum(1 for indicator in non_keto_indicators 
-                        if indicator in ingredients_str or indicator in title)
-    
-    # Add some randomness for realistic distribution
-    vegan_score += random.uniform(-0.5, 0.5)
-    keto_score += random.uniform(-0.5, 0.5)
-    
-    # Determine classifications
-    is_vegan = vegan_score > 0.5 and "meat" not in ingredients_str and "cheese" not in ingredients_str
-    is_keto = keto_score > non_keto_score and non_keto_score < 1
-    
-    return {
-        "recipe_title": recipe.get("title"),
-        "is_vegan": is_vegan,
-        "is_keto": is_keto,
-        "vegan_confidence": min(max(vegan_score / 3, 0), 1),
-        "keto_confidence": min(max(keto_score / 3, 0), 1),
-        "processing_time": random.uniform(0.001, 0.005)
-    }
-
 def run_performance_test(n_samples: int = 5000, save_results: bool = True) -> Dict[str, Any]:
     """Runs the core performance test on a sample of recipes.
 
     Detailed Description:
-        - This function orchestrates the main performance test loop.
-        - It initializes the `PerformanceMetrics` container.
-        - It loads the recipe data using `load_random_recipes`.
-        - It then iterates through each recipe, calling `mock_classify_recipe` to get a simulated
-          classification and timing each call.
-        - After the loop, it calculates and aggregates all performance statistics and prediction distributions.
+        - Orchestrates the main performance test loop.
+        - Initializes `PerformanceMetrics`, loads recipe data, and classifies each recipe.
+        - Calculates and aggregates performance statistics and prediction distributions.
 
     Parameters:
         - n_samples (int): The number of recipes to test.
-        - save_results (bool): If True, the results will be saved to files.
+        - save_results (bool): If True, results will be saved to files.
 
     Returns:
-        - Dict[str, Any]: A comprehensive dictionary containing all performance metrics,
-          test parameters, and prediction distributions.
+        - Dict[str, Any]: Comprehensive dictionary of performance metrics.
     """
     logger.info(f"🚀 Starting Performance Test on {n_samples} Random Samples")
     
-    # Initialize metrics
     metrics = PerformanceMetrics()
     
-    # Load random recipes
     recipes = load_random_recipes(n_samples)
     actual_samples = len(recipes)
     
     logger.info(f"📊 Testing {actual_samples} recipes...")
     
-    # Start performance test
     metrics.start_timer()
     
-    # Process each recipe
     for i, recipe in enumerate(recipes):
         try:
-            # Time individual recipe processing
             recipe_start = time.time()
-            
-            # Classify recipe (using mock function for testing)
-            from nb.src.diet_classifiers import classify_recipe_with_context # Assuming this function exists
-            result = classify_recipe_with_context(recipe)             
+            result = classify_recipe_with_rules(recipe)             
             recipe_end = time.time()
             recipe_time = recipe_end - recipe_start
             
-            # Record metrics
             metrics.add_recipe_time(recipe_time)
             metrics.add_prediction(result)
             
-            # Progress logging
             if (i + 1) % 500 == 0:
                 logger.info(f"Processed {i + 1}/{actual_samples} recipes...")
                 
@@ -277,15 +215,12 @@ def run_performance_test(n_samples: int = 5000, save_results: bool = True) -> Di
             logger.error(f"Error processing recipe {i}: {e}")
             metrics.add_error(str(e))
     
-    # End performance test
     metrics.end_timer()
     
-    # Calculate performance statistics
     total_time = metrics.get_total_time()
     avg_time_per_recipe = metrics.get_average_time_per_recipe()
     throughput = metrics.get_throughput_per_second()
     
-    # Analyze predictions
     vegan_predictions = [p["is_vegan"] for p in metrics.predictions]
     keto_predictions = [p["is_keto"] for p in metrics.predictions]
     
@@ -294,7 +229,6 @@ def run_performance_test(n_samples: int = 5000, save_results: bool = True) -> Di
     both_count = sum(1 for i in range(len(vegan_predictions)) 
                     if vegan_predictions[i] and keto_predictions[i])
     
-    # Compile results
     results = {
         "test_parameters": {
             "requested_samples": n_samples,
@@ -325,7 +259,6 @@ def run_performance_test(n_samples: int = 5000, save_results: bool = True) -> Di
         }
     }
     
-    # Log summary
     logger.success("🎯 Performance Test Complete!")
     logger.info(f"📈 Processed {actual_samples} recipes in {total_time:.2f} seconds")
     logger.info(f"⚡ Average time per recipe: {avg_time_per_recipe*1000:.2f}ms")
@@ -343,59 +276,47 @@ def save_performance_results(results: Dict[str, Any], metrics: PerformanceMetric
     """Saves performance test results to a JSON file and triggers visualization.
 
     Detailed Description:
-        - This function handles the output of the performance test.
-        - It creates the output directory if it doesn't exist.
-        - It saves the detailed results dictionary to a `performance_test_results.json` file.
-        - It then calls the functions to generate the visual charts and the text summary report.
+        - Handles the output of the performance test.
+        - Creates the output directory if it doesn't exist.
+        - Saves the results dictionary to `performance_test_results.json`.
+        - Calls functions to generate visual charts and a text summary report.
 
     Parameters:
         - results (Dict[str, Any]): The dictionary of results from `run_performance_test`.
-        - metrics (PerformanceMetrics): The metrics object containing raw timing data needed for visualizations.
+        - metrics (PerformanceMetrics): Metrics object with raw timing data for visualizations.
     """
     
     output_dir = Path("nb/src/data/performance_results")
     output_dir.mkdir(exist_ok=True, parents=True)
     
-    # Save JSON results
     json_path = output_dir / "performance_test_results.json"
     with open(json_path, 'w') as f:
         json.dump(results, f, indent=2)
     logger.info(f"💾 Saved results to {json_path}")
     
-    # Generate visualizations
     create_performance_visualizations(results, metrics, output_dir)
 
 def create_performance_visualizations(results: Dict[str, Any], metrics: PerformanceMetrics, output_dir: Path):
     """Generates and saves a set of plots summarizing the performance results.
 
     Detailed Description:
-        - This function creates a 2x2 subplot figure to visualize the performance test results.
-        - The visualizations include:
-            1. A histogram of recipe processing times.
-            2. A pie chart showing the distribution of dietary classifications.
-            3. A bar chart of key performance metrics (throughput, latency).
-            4. A line plot of cumulative processing time.
-        - This provides a quick, visual summary of the system's performance.
+        - Creates a 2x2 subplot figure to visualize performance test results.
+        - Includes: histogram of processing times, pie chart of dietary classifications,
+          bar chart of key performance metrics, and a line plot of cumulative processing time.
 
     Parameters:
         - results (Dict[str, Any]): The main results dictionary.
-        - metrics (PerformanceMetrics): The metrics object containing the raw timing data.
-        - output_dir (Path): The directory where the output PNG file will be saved.
+        - metrics (PerformanceMetrics): Metrics object with raw timing data.
+        - output_dir (Path): Directory for the output PNG file.
 
-    Libraries Used:
-        - matplotlib & seaborn: These are standard libraries for data visualization in Python,
-          used here to create clear and informative plots.
     """
     
-    # Set style
     plt.style.use('default')
     sns.set_palette("husl")
     
-    # Create subplot figure
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
     fig.suptitle('Recipe Classification Performance Test Results', fontsize=16, fontweight='bold')
     
-    # 1. Processing Time Distribution
     ax1.hist(metrics.recipe_times, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
     ax1.set_xlabel('Processing Time (seconds)')
     ax1.set_ylabel('Frequency')
@@ -404,7 +325,6 @@ def create_performance_visualizations(results: Dict[str, Any], metrics: Performa
                label=f'Mean: {np.mean(metrics.recipe_times)*1000:.1f}ms')
     ax1.legend()
     
-    # 2. Prediction Distribution Pie Chart
     pred_dist = results["prediction_distribution"]
     vegan_only = pred_dist["total_vegan"] - pred_dist["both_vegan_and_keto"]
     keto_only = pred_dist["total_keto"] - pred_dist["both_vegan_and_keto"]
@@ -418,7 +338,6 @@ def create_performance_visualizations(results: Dict[str, Any], metrics: Performa
     ax2.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
     ax2.set_title('Recipe Classification Distribution')
     
-    # 3. Performance Metrics Bar Chart
     metrics_names = ['Throughput\n(recipes/sec)', 'Avg Time\n(ms)', 'Success Rate\n(%)']
     metrics_values = [
         results["performance_metrics"]["throughput_recipes_per_second"],
@@ -430,13 +349,11 @@ def create_performance_visualizations(results: Dict[str, Any], metrics: Performa
     ax3.set_title('Key Performance Metrics')
     ax3.set_ylabel('Value')
     
-    # Add value labels on bars
     for bar, value in zip(bars, metrics_values):
         height = bar.get_height()
         ax3.text(bar.get_x() + bar.get_width()/2., height,
                 f'{value:.1f}', ha='center', va='bottom')
     
-    # 4. Cumulative Processing Time
     cumulative_times = np.cumsum(metrics.recipe_times)
     ax4.plot(range(len(cumulative_times)), cumulative_times, color='purple', linewidth=2)
     ax4.set_xlabel('Recipe Number')
@@ -448,7 +365,6 @@ def create_performance_visualizations(results: Dict[str, Any], metrics: Performa
     
     plt.figure(figsize=(10, 6))
     
-    # Create a scatter plot of individual recipe times vs. throughput at that point in time
     throughputs = [i / (metrics.recipe_times[i] + 1e-9) for i in range(1, len(metrics.recipe_times))]
     latencies_ms = [t * 1000 for t in metrics.recipe_times[1:]]
 
@@ -458,7 +374,6 @@ def create_performance_visualizations(results: Dict[str, Any], metrics: Performa
     plt.ylabel('Instantaneous Throughput (recipes/sec)')
     plt.xscale('log') # Latency often has a long tail, log scale helps visualization
     
-    # Add average lines
     avg_latency = results["performance_metrics"]["average_time_per_recipe_seconds"] * 1000
     avg_throughput = results["performance_metrics"]["throughput_recipes_per_second"]
     plt.axvline(avg_latency, color='r', linestyle='--', label=f'Avg Latency: {avg_latency:.2f} ms')
@@ -470,27 +385,23 @@ def create_performance_visualizations(results: Dict[str, Any], metrics: Performa
     logger.info(f"📊 Saved SOTA benchmark visualization to {viz_path}")
     plt.show()
 
-    # Save visualization
     viz_path = output_dir / "performance_test_visualization.png"
     plt.savefig(viz_path, dpi=300, bbox_inches='tight')
     logger.info(f"📊 Saved visualization to {viz_path}")
     plt.close()
     
-    # Create summary report
     create_summary_report(results, output_dir)
 
 def create_summary_report(results: Dict[str, Any], output_dir: Path):
     """Creates a human-readable text file summarizing the test results.
 
     Detailed Description:
-        - This function generates a `.txt` file that provides a clean, text-based summary
-          of the most important findings from the performance test.
-        - It includes sections for overall performance metrics, prediction distribution,
-          and timing statistics, making the results easy to read and share.
+        - Generates a `.txt` file with a clean, text-based summary of important findings.
+        - Includes sections for performance metrics, prediction distribution, and timing statistics.
 
     Parameters:
         - results (Dict[str, Any]): The dictionary of test results.
-        - output_dir (Path): The directory where the report file will be saved.
+        - output_dir (Path): The directory for the report file.
     """
     
     report_path = output_dir / "performance_test_report.txt"
@@ -529,15 +440,12 @@ def create_summary_report(results: Dict[str, Any], output_dir: Path):
         
     logger.info(f"📝 Saved summary report to {report_path}")
 
-# Main execution function for easy calling
 def run_performance_test_suite(n_samples: int = 5000) -> Dict[str, Any]:
     """The main entry-point function to run the complete performance test suite.
 
     Detailed Description:
-        - This function serves as the primary wrapper for executing the performance test.
-        - It calls `run_performance_test` and includes top-level error handling (a try...except block)
-          to catch any exceptions that might occur during the test run, ensuring that the script
-          exits gracefully.
+        - Primary wrapper for executing the performance test.
+        - Calls `run_performance_test` and includes top-level error handling.
 
     Parameters:
         - n_samples (int): The number of random samples to test.
@@ -546,7 +454,7 @@ def run_performance_test_suite(n_samples: int = 5000) -> Dict[str, Any]:
         - Dict[str, Any]: The complete performance test results.
 
     Raises:
-        - Exception: Catches and re-raises any exception that occurs during the test.
+        - Exception: Catches and re-raises any exception during the test.
     """
     logger.info("🎯 Starting Recipe Classification Performance Test Suite")
     
@@ -560,5 +468,4 @@ def run_performance_test_suite(n_samples: int = 5000) -> Dict[str, Any]:
         raise
 
 if __name__ == "__main__":
-    # Run performance test with default parameters
-    results = run_performance_test_suite(5000) 
+    results = run_performance_test_suite(5000)

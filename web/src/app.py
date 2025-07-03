@@ -20,13 +20,83 @@ from time import sleep
 import sys
 import logging
 import os
+from pathlib import Path
 
-# Add shared package to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+# Use local diet classifiers for web app
+from diet_classifiers import is_keto, is_vegan
 
-from shared.config import app_config
-from shared.database import db_manager
-from shared.diet_classifiers import is_keto, is_vegan
+# For now, use simple configuration for web app
+class WebConfig:
+    OPENSEARCH_URL = "http://localhost:9200"
+
+app_config = WebConfig()
+
+# Simple database manager for web app
+from opensearchpy import OpenSearch
+import logging
+
+class SimpleDBManager:
+    def __init__(self):
+        self.opensearch_client = None
+        self._init_opensearch()
+    
+    def _init_opensearch(self):
+        try:
+            self.opensearch_client = OpenSearch(
+                hosts=[app_config.OPENSEARCH_URL],
+                http_auth=None,
+                use_ssl=False,
+                verify_certs=False,
+                ssl_show_warn=False,
+            )
+        except Exception as e:
+            logging.error(f"Failed to connect to OpenSearch: {e}")
+    
+    def get_opensearch_client(self):
+        return self.opensearch_client
+    
+    def search_recipes(self, ingredient_query: str, size: int = 12):
+        if not self.opensearch_client:
+            return {"hits": {"hits": [], "total": {"value": 0}}}
+        
+        query = {
+            "query": {
+                "match": {
+                    "ingredients": {
+                        "query": ingredient_query,
+                        "fuzziness": "AUTO"
+                    }
+                }
+            }
+        }
+        
+        try:
+            response = self.opensearch_client.search(
+                index="recipes",
+                body=query,
+                size=size
+            )
+            return response
+        except Exception as e:
+            logging.error(f"OpenSearch query failed: {e}")
+            return {"hits": {"hits": [], "total": {"value": 0}}}
+    
+    def get_all_ingredients(self, limit: int = 10000):
+        if not self.opensearch_client:
+            return []
+        
+        try:
+            response = self.opensearch_client.search(
+                index="ingredients", 
+                body={"query": {"match_all": {}}}, 
+                size=limit
+            )
+            return [hit["_source"]["ingredients"] for hit in response["hits"]["hits"]]
+        except Exception as e:
+            logging.error(f"Failed to get ingredients: {e}")
+            return []
+
+db_manager = SimpleDBManager()
 
 # Configure logging - keep it simple
 logging.basicConfig(
@@ -46,23 +116,16 @@ def wait_for_opensearch(client, max_retries=30, retry_interval=2):
     """Waits for OpenSearch to become available using exponential backoff polling.
 
     Detailed Description:
-        - This function implements a robust startup pattern for distributed systems.
-        - It repeatedly attempts to connect to OpenSearch using the `ping()` method, which is
-          a lightweight health check that doesn't require any specific indices to exist.
-        - This prevents the web application from starting before its backend dependencies are ready,
-          avoiding connection errors during the critical startup phase.
+        - This function polls OpenSearch for availability using `ping()`.
+        - It prevents the application from starting before its dependencies are ready.
 
     Parameters:
-        - client (opensearchpy.OpenSearch): The configured OpenSearch client instance.
-        - max_retries (int): Maximum number of connection attempts before giving up.
-        - retry_interval (int): Time in seconds to wait between connection attempts.
+        - client (opensearchpy.OpenSearch): The configured OpenSearch client.
+        - max_retries (int): Maximum connection attempts.
+        - retry_interval (int): Time in seconds to wait between attempts.
 
     Returns:
-        - bool: True if OpenSearch becomes available within the retry limit, False otherwise.
-
-    Libraries Used:
-        - time: Used for the `sleep()` function to implement the retry delay.
-        - logging: For structured error reporting when connection attempts fail.
+        - bool: True if OpenSearch is available, False otherwise.
     """
     print("Waiting for OpenSearch to be ready...")  # Simple status message
     for i in range(max_retries):
@@ -115,17 +178,12 @@ def home():
     """Renders the main search interface for the recipe application.
 
     Detailed Description:
-        - This Flask route serves the primary user interface of the application.
+        - This Flask route serves the primary user interface.
         - It renders the `index.html` template, which contains the search form,
-          ingredient selection interface, and results display area.
-        - This follows the standard Flask pattern for serving templated HTML content.
+          ingredient selection, and results display area.
 
     Returns:
         - str: The rendered HTML content of the main page.
-
-    Libraries Used:
-        - Flask: The web framework used for routing and template rendering. Flask is chosen
-          for its simplicity and flexibility compared to heavier frameworks like Django.
     """
     return render_template('index.html')
 
@@ -135,21 +193,16 @@ def select2():
     """Provides ingredient autocomplete API compatible with Select2 JavaScript library.
 
     Detailed Description:
-        - This endpoint implements the server-side component of an autocomplete feature.
-        - It searches the preloaded ingredient list using simple string containment matching.
-        - Results are formatted according to Select2's expected JSON structure: objects with
-          'id' and 'text' fields.
-        - Results are sorted by ingredient name length to prioritize shorter, more specific matches.
-        - This approach avoids database queries during autocomplete, providing sub-millisecond response times.
+        - This endpoint implements the server-side autocomplete.
+        - It searches the preloaded ingredient list using string containment matching.
+        - Results are formatted for Select2 (objects with 'id' and 'text').
+        - Results are sorted by ingredient name length.
 
     Parameters (via query string):
-        - q (str): The search query string from the user's input.
+        - q (str): The search query string.
 
     Returns:
-        - flask.Response: JSON response with 'results' array containing matching ingredients.
-
-    Libraries Used:
-        - Flask: For request parameter parsing and JSON response generation.
+        - flask.Response: JSON response with 'results' array.
     """
     q = request.args.get("q", "").strip()
     results = [{"id": id_, "text": txt_}
@@ -163,30 +216,22 @@ def search_by_ingredients():
     """Executes recipe search with real-time dietary classification.
 
     Detailed Description:
-        - This is the core search endpoint that orchestrates the entire recipe discovery process.
-        - **Input Processing:** It parses ingredient IDs from the query string and maps them back
-          to ingredient names using the preloaded ingredient list.
-        - **Search Execution:** It constructs a fuzzy `match` query for OpenSearch, which provides
-          tolerance for spelling variations and partial matches.
-        - **Classification:** For each search result, it applies the custom `is_keto` and `is_vegan`
-          classifiers in real-time, providing immediate dietary information.
-        - **Response Formatting:** It structures the results with recipe metadata, classification
-          flags, and relevance scores for the frontend.
+        - This endpoint orchestrates the recipe discovery process.
+        - It parses ingredient IDs and maps them to names.
+        - It constructs a fuzzy `match` query for OpenSearch.
+        - It applies `is_keto` and `is_vegan` classifiers to each result.
+        - It formats results with recipe metadata and classification flags.
 
     Parameters (via query string):
-        - q (str): Space-separated ingredient IDs from the autocomplete selection.
+        - q (str): Space-separated ingredient IDs.
 
     Returns:
-        - flask.Response: JSON response containing search results with dietary classifications,
+        - flask.Response: JSON response with search results and classifications,
           or error message with appropriate HTTP status code.
 
     Raises:
         - 400: If no ingredient query is provided.
         - 500: If OpenSearch query execution fails.
-
-    Libraries Used:
-        - opensearchpy: For executing the fuzzy search query against the recipes index.
-        - diet_classifiers: Custom module containing the `is_keto` and `is_vegan` classification functions.
 
     Examples:
         >>> # GET /search?q=123 456 789

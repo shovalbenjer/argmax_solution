@@ -7,10 +7,10 @@ from loguru import logger
 from rapidfuzz import process, fuzz
 from typing import List, Dict
 
-# Add shared package to path
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+# Add nb/src to path for database access
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from shared.database import db_manager
+from database import db_manager
 
 # --- Database Access ---
 def get_all_ingredient_names() -> List[str]:

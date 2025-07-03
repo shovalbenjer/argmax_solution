@@ -15,13 +15,13 @@ RUN mkdir -p /app/data
 RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parquet -o /app/data/allrecipes.parquet
 
 # Copy requirements first to leverage Docker cache
-COPY requirements.txt .
-COPY ../shared/requirements.txt shared-requirements.txt
+COPY web/requirements.txt .
+COPY shared/requirements.txt shared-requirements.txt
 RUN pip install --no-cache-dir -r shared-requirements.txt -r requirements.txt
 
 # Copy shared modules and application source code
-COPY ../shared/ /app/shared/
-COPY src/ /app
+COPY shared/ /app/shared/
+COPY web/src/ /app
 
 # Expose the port the app runs on
 EXPOSE 8080
