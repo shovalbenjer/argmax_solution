@@ -1,4 +1,4 @@
-# 🥑 Search By Ingredients Challenge - SOTA Semantic Architecture
+# Search By Ingredients Challenge - SOTA Semantic Architecture
 ![Argmax](https://argmaxml.com/wp-content/uploads/2024/04/Argmax_logo_inline.svg)
 
 ### **Project Overview**
