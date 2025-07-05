@@ -1,0 +1,237 @@
+term,aliases,is_explicitly_non_vegan,description,source_details,requires_contextual_check,is_vegan_exception_term
+afterbirth,[],1,"From the uterus after birth, typically from cows. Used in some cosmetics and biological research.","From the uterus after birth, typically from cows",0,0
+albumen,"[""Albumin"", ""egg whites""]",1,"In eggs, milk, muscles, blood, and many vegetable tissues and fluids. In cosmetics, albumen is usually derived from egg whites and used as a coagulating agent. May cause allergic reaction. In cakes, cookies, candies, etc. Egg whites sometimes used in “clearing” wines.","From egg whites",1,0
+albumin,"[""Albumen"", ""egg whites""]",1,"In eggs, milk, muscles, blood, and many vegetable tissues and fluids. In cosmetics, albumen is usually derived from egg whites and used as a coagulating agent. May cause allergic reaction. In cakes, cookies, candies, etc. Egg whites sometimes used in “clearing” wines.","From egg whites",1,0
+alcloxa,"[""Allantoin""]",1,"A derivative of allantoin, which can be derived from animal sources or plants.","From animal sources or plants",1,0
+aldioxa,"[""Allantoin""]",1,"A derivative of allantoin, which can be derived from animal sources or plants.","From animal sources or plants",1,0
+alanine,"[""Amino acids""]",0,"An amino acid. While most amino acids can be synthesized or derived from plants, some can be derived from animal sources.","Synthesized or derived from plants; can also be from animal sources",1,0
+aliphatic alcohol,[],0,"Generally synthetic or plant-derived, but some can be derived from animal fats.","Synthetic or plant-derived; can also be from animal fats",1,0
+aliphatic alcohols,[],0,"Generally synthetic or plant-derived, but some can be derived from animal fats.","Synthetic or plant-derived; can also be from animal fats",1,0
+allantoin,"[""Alcloxa"", ""Aldioxa"", ""Uric acid""]",1,"Uric acid from cows, most mammals. Also in many plants (especially comfrey). In cosmetics (especially creams and lotions) and used in treatment of wounds and ulcers.","From cows, most mammals",1,0
+alligator skin,[],1,"Leather from alligators. Used in luxury goods.","From alligators",0,0
+alpha-hydroxy acids,[],0,"Can be synthesized or derived from fruits and milk. Lactic acid can be animal-derived.","Synthesized or derived from fruits and milk",1,0
+ambergris,"[""Ambergris""]",1,"From whale intestines. Used as a fixative in perfumes and as a flavoring.","From whale intestines",0,0
+amerchol l101,"[""Lanolin""]",0,"A lanolin derivative, which is from sheep's wool. However, processed lanolin can be considered vegan by some.","From sheep's wool (lanolin derivative)",1,0
+amino acids,[],0,"Building blocks of protein, can be synthesized, plant-derived, or animal-derived.","Synthesized, plant-derived, or animal-derived",1,0
+aminosuccinate acid,[],0,"A type of amino acid derivative; can be synthesized or derived from animal sources.","Synthesized or derived from animal sources",1,0
+angora,[],1,"Hair from the Angora rabbit or goat. Used in clothing and textiles.","From Angora rabbit or goat",0,0
+animal fats,[],1,"Fats derived from animals. Used in foods and cosmetics.","From animals",0,0
+animal fats and oils,[],1,"Fats and oils derived from animals. Used in foods and cosmetics.","From animals",0,0
+animal hair,[],1,"Hair from animals. Used in brushes, textiles, etc.","From animals",0,0
+arachidonic acid,[],1,"Fatty acid found in animal liver and fat.","From animal liver and fat",0,0
+arachidyl proprionate,[],0,"An ester, can be synthesized or derived from animal sources.","Synthesized or derived from animal sources",1,0
+bee pollen,[],1,"Pollen collected by bees.","Collected by bees",0,0
+bee products,[],1,"Products made by bees, such as honey, beeswax, propolis, royal jelly.","Made by bees",0,0
+beeswax,"[""Honeycomb"", ""Cera Flava""]",1,"Wax obtained from melting honeycomb.","From bees",0,0
+beta carotene,[],0,"A pigment found in plants (like carrots) and also synthesized.","From plants or synthesized",0,0
+biotin,[],0,"A B vitamin, can be synthesized or derived from animal sources.","Synthesized or derived from animal sources",1,0
+blood,[],1,"Animal blood. Used in some traditional foods and historically in some products.","From animals",0,0
+boar bristles,[],1,"Bristles from wild boars. Used in brushes.","From wild boars",0,0
+bone char,[],1,"Charred animal bones. Used as a decolorizing agent, especially in sugar refining.","From animal bones",0,0
+bone meal,[],1,"Ground animal bones. Used as a fertilizer or dietary supplement.","From animal bones",0,0
+calciferol,"[""Vitamin D""]",0,"A form of Vitamin D, can be synthesized or derived from animal sources (like fish liver oil).","Synthesized or derived from animal sources",1,0
+calfskin,[],1,"Leather made from the skin of calves.","From calves",0,0
+capryl betaine,[],0,"A synthetic or plant-derived surfactant, but can sometimes be derived from animal sources.","Synthetic or plant-derived; can also be from animal sources",1,0
+caprylamine oxide,[],0,"A synthetic or plant-derived surfactant, but can sometimes be derived from animal sources.","Synthetic or plant-derived; can also be from animal sources",1,0
+caprylic acid,[],0,"A fatty acid found in coconut oil and palm kernel oil. Can also be synthesized.","From coconut oil, palm kernel oil, or synthesized",0,0
+caprylic triglyceride,[],0,"An ester of caprylic acid and glycerin. Generally considered vegan, but glycerin can be animal-derived.","Generally from coconut oil or synthesized",1,0
+carbamide,"[""Urea""]",0,"A compound found in urine of mammals and also synthesized. Used in cosmetics and fertilizers.","Synthesized or from urine of mammals",1,0
+carmine,"[""Cochineal"", ""Carminic Acid"", ""Red pigment""]",1,"Red pigment from crushed cochineal insects.","From crushed cochineal insects",0,0
+carminic acid,"[""Carmine"", ""Cochineal"", ""Red pigment""]",1,"The active coloring agent in carmine, derived from cochineal insects.","From cochineal insects",0,0
+carotene,[],0,"Pigment found in plants (like carrots) and also synthesized.","From plants or synthesized",0,0
+casein,"[""Caseinate"", ""Sodium Caseinate"", ""Milk protein""]",1,"Milk protein. Found in dairy products and some processed foods.","From milk",0,0
+caseinate,"[""Casein"", ""Sodium Caseinate"", ""Milk protein""]",1,"A salt or ester of casein, derived from milk protein.","From milk",0,0
+cashmere,[],1,"Fine wool from the cashmere goat. Used in textiles.","From cashmere goat",0,0
+castor,[],0,"Botanical source for castor oil. Generally vegan.","From castor beans",0,0
+castoreum,"[""Castoreum""]",1,"Secretion from the castor sacs of beavers. Used in perfumes and as a flavoring.","From beaver castor sacs",0,0
+catgut,[],1,"Surgical thread made from the intestines of animals, usually sheep or cattle.","From intestines of animals (sheep, cattle)",0,0
+cera flava,"[""Beeswax"", ""Honeycomb""]",1,"Latin name for beeswax.","From bees",0,0
+cerebrosides,[],0,"A type of lipid found in animal nerve tissue. Can also be synthesized.","From animal nerve tissue or synthesized",1,0
+cetyl alcohol,[],0,"A fatty alcohol, can be synthesized or derived from animal fats/waxes.","Synthesized or from animal fats/waxes",1,0
+cetyl palmitate,[],0,"An ester, can be synthesized or derived from animal fats/waxes.","Synthesized or from animal fats/waxes",1,0
+chitosan,[],0,"Derived from chitin, which is found in crustacean shells and fungi. Fungal sources are vegan.","From crustacean shells or fungi",1,0
+cholesterin,"[""Cholesterol""]",0,"A steroid found in animal cell membranes. Can also be synthesized.","From animal cell membranes or synthesized",1,0
+cholesterol,"[""Cholesterin""]",0,"A steroid found in animal cell membranes. Can also be synthesized.","From animal cell membranes or synthesized",1,0
+choline bitartrate,"[""Lecithin""]",0,"A nutrient that can be synthesized or derived from animal or plant sources.","Synthesized or from animal/plant sources",1,0
+civet,[],1,"Secretion from the civet cat. Used in perfumes.","From civet cat secretions",0,0
+cochineal,"[""Carmine"", ""Carminic Acid"", ""Red pigment""]",1,"A red dye made from crushed cochineal insects.","From crushed cochineal insects",0,0
+cod liver oil,[],1,"Oil extracted from cod livers. Used as a source of vitamins.","From cod livers",0,0
+collagen,[],1,"A protein found in animal connective tissues. Used in cosmetics and supplements.","From animal connective tissues",0,0
+corticosteroid,[],0,"A type of hormone, can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+cortisone,[],0,"A hormone, can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+cysteine,"[""Cysteine L-form""]",0,"An amino acid. Can be synthesized, plant-derived, or animal-derived.","Synthesized, plant-derived, or animal-derived",1,0
+cysteine l-form,[],0,"An amino acid. Can be synthesized, plant-derived, or animal-derived.","Synthesized, plant-derived, or animal-derived",1,0
+cystine,[],0,"An amino acid. Can be synthesized, plant-derived, or animal-derived.","Synthesized, plant-derived, or animal-derived",1,0
+dexpanthenol,[],0,"A form of panthenol (Vitamin B5). Can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+diglycerides,[],0,"Fatty acid esters. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+dimethyl stearamine,[],0,"A synthetic amine.","Synthetic",0,0
+down,[],1,"Soft feathers from birds, especially waterfowl. Used in clothing and bedding.","From birds",0,0
+duodenum substances,[],1,"From the digestive tracts of cows and pigs. Used in some vitamin tablets and medicines.","From digestive tracts of cows and pigs",0,0
+egg protein,[],1,"Protein derived from eggs.","From eggs",0,0
+elastin,[],1,"Protein found in animal connective tissues. Used in cosmetics.","From animal connective tissues",0,0
+emu oil,[],1,"Oil from emus. Used in cosmetics.","From emus",0,0
+ergocalciferol,"[""Vitamin D2""]",0,"A form of Vitamin D. Typically vegan, but can be synthesized.","Synthesized or from plant/animal sources",1,0
+ergosterol,[],0,"A sterol found in yeast and animal tissues. Can be converted to Vitamin D2.","From yeast or animal tissues",1,0
+estradiol,[],0,"A hormone, can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+estrogen,[],0,"A hormone, can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+fatty acids,[],0,"Can be synthesized or derived from animal fats or vegetable oils.","Synthesized or from animal fats/vegetable oils",1,0
+feathers,[],1,"Feathers from birds. Used in crafts, down products, etc.","From birds",0,0
+fish liver oil,[],1,"Oil extracted from the livers of fish.","From fish livers",0,0
+fish oil,[],1,"Oil extracted from the bodies of fish.","From fish",0,0
+fish scales,[],1,"Scales from fish. Used in some pearl-like cosmetics or decorations.","From fish scales",0,0
+fur,[],1,"Hair or skin of an animal. Used in clothing and accessories.","From animals",0,0
+gel,[],0,"Can be derived from animal sources (gelatin) or plants (agar-agar, pectin).","From animal sources or plants",1,0
+gelatin,[],1,"Protein derived from animal collagen. Used in food, cosmetics, and pharmaceuticals.","From animal collagen",0,0
+glucose tyrosinase,[],0,"An enzyme. Can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+glycerides,[],0,"Fatty acid esters. Can be synthesized or derived from animal fats or vegetable oils.","Synthesized or from animal fats/vegetable oils",1,0
+glycerin,"[""Glycerol"", ""Diglycerides"", ""Glycerides"", ""Polyglycerol"", ""Glyceryls"", ""Glycreth-26""]",1,"A byproduct of soap manufacture, often uses animal fat, but can also be plant-derived.","Byproduct of soap manufacture (can use animal fat)",1,0
+glycerol,"[""Glycerin"", ""Diglycerides"", ""Glycerides"", ""Polyglycerol"", ""Glyceryls"", ""Glycreth-26""]",1,"Synonym for glycerin.","Byproduct of soap manufacture (can use animal fat)",1,0
+glyceryls,[],0,"Refers to glycerol or glycerides. Can be synthesized or derived from animal fats or vegetable oils.","Synthesized or from animal fats/vegetable oils",1,0
+glycreth-26,[],0,"A synthetic emulsifier and surfactant.","Synthetic",0,0
+guanine,[],0,"A compound found in fish scales, bird guano, and synthesized. Used in cosmetics for pearlescence.","From fish scales, bird guano, or synthesized",1,0
+hide glue,[],1,"Glue made from animal hides.","From animal hides",0,0
+honey,[],1,"Sweet substance produced by bees.","Produced by bees",0,0
+honeycomb,"[""Beeswax"", ""Cera Flava""]",1,"The structure made by bees to hold honey.","Made by bees",0,0
+horsehair,[],1,"Hair from horses. Used in brushes and upholstery.","From horses",0,0
+hyaluronic acid,[],0,"A substance found in animal connective tissues, but commonly synthesized or derived from bacterial fermentation for commercial use.","From animal connective tissues or synthesized/bacterial fermentation",1,0
+hydrocortisone,[],0,"A steroid hormone, can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+hydrolyzed animal protein,[],1,"Protein from animals that has been broken down into smaller pieces.","From animals",0,0
+imidazolidinyl urea,[],0,"A preservative. Can be synthetic or derived from animal sources.","Synthetic or from animal sources",1,0
+insulin,[],1,"A hormone produced by the pancreas, typically from animals (pigs, cows) or synthesized.","From animals (pigs, cows) or synthesized",0,0
+isinglass,[],1,"A gelatinous substance obtained from fish bladders. Used in clarifying wine and beer.","From fish bladders",0,0
+isopropyl lanolate,[],0,"An ester derived from lanolin. Lanolin is from sheep's wool.","Derived from lanolin (sheep's wool)",1,0
+isopropyl myristate,[],0,"A synthetic emollient and solvent.","Synthetic",0,0
+isopropyl palmitate,[],0,"A synthetic emollient and solvent.","Synthetic",0,0
+keratin,[],1,"A protein found in hair, nails, and feathers.","From hair, nails, feathers",0,0
+l-form,[],0,"Refers to a specific molecular configuration, not inherently animal-derived. Often used with amino acids.","Not inherently animal-derived",0,0
+lactic acid,"[""Sodium Steroyl Lactylate""]",1,"Typically derived from plants (beets), but can be derived from animal sources (milk, muscle tissue).","Plant-derived (beets) or animal-derived (milk, muscle tissue)",1,0
+lactose,[],1,"Sugar found in milk.","From milk",0,0
+laneth,[],0,"A synthetic emulsifier, often derived from lanolin. Lanolin is from sheep's wool.","Synthetic, often derived from lanolin (sheep's wool)",1,0
+lanogene,[],0,"A processed form of lanolin, which is from sheep's wool.","Processed from lanolin (sheep's wool)",1,0
+lanolin,[],0,"Fatty substance obtained from sheep's wool. Used in cosmetics.","From sheep's wool",1,0
+lanolin acids,[],0,"Acids derived from lanolin. Lanolin is from sheep's wool.","Derived from lanolin (sheep's wool)",1,0
+lanolin alcohol,[],0,"Alcohols derived from lanolin. Lanolin is from sheep's wool.","Derived from lanolin (sheep's wool)",1,0
+lanolin alcohols,[],0,"Alcohols derived from lanolin. Lanolin is from sheep's wool.","Derived from lanolin (sheep's wool)",1,0
+lanosterols,[],0,"Sterols found in wool wax (lanolin).","From wool wax (lanolin)",1,0
+lard,[],1,"Fat rendered from pigs.","From pigs",0,0
+leather,[],1,"Material made from the tanned hides of animals.","From animal hides",0,0
+lecithin,[],1,"Waxy substance found in all living organisms. Commonly derived from eggs or soybeans. Can be synthesized.","From eggs, soybeans, or synthesized",1,0
+linoleic acid,[],0,"An essential fatty acid. Can be synthesized or derived from vegetable oils.","Synthesized or from vegetable oils",0,0
+lipase,[],0,"An enzyme. Can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+lipids,[],0,"General term for fats and oils. Can be of animal or vegetable origin, or synthesized.","Animal, vegetable, or synthesized origin",1,0
+lipoids,[],0,"Similar to lipids. Can be of animal or vegetable origin, or synthesized.","Animal, vegetable, or synthesized origin",1,0
+luna sponge,[],1,"A type of sea sponge.","Sea sponge",0,0
+marine oil,[],1,"Oil derived from marine animals.","From marine animals",0,0
+methionine,[],0,"An essential amino acid. Can be synthesized or derived from animal sources (like egg albumen or casein).","Synthesized or from animal sources",1,0
+milk protein,[],1,"Protein derived from milk.","From milk",0,0
+mink oil,[],1,"Oil from mink. Used in cosmetics.","From mink",0,0
+monoglycerides,[],0,"Fatty acid esters. Can be synthesized or derived from animal fats or vegetable oils.","Synthesized or from animal fats/vegetable oils",1,0
+musk,[],1,"Secretion from the musk deer. Used in perfumes.","From musk deer",0,0
+musk oil,[],1,"Oil containing musk.","From musk deer",0,0
+myristal ether sulfate,[],0,"A synthetic surfactant.","Synthetic",0,0
+myristic acid,[],0,"A fatty acid found in nutmeg, palm kernel oil, and coconut oil. Can also be synthesized.","From nutmeg, palm kernel oil, coconut oil, or synthesized",0,0
+myristyls,[],0,"Refers to myristyl alcohol or myristic acid. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+nucleic acids,[],0,"Building blocks of DNA and RNA. Can be synthesized or derived from animal or plant sources.","Synthesized or from animal/plant sources",1,0
+ocenol,[],0,"A synthetic alcohol.","Synthetic",0,0
+octyl dodecanol,[],0,"A synthetic fatty alcohol.","Synthetic",0,0
+oleic acid,[],0,"A fatty acid found in animal fats and vegetable oils. Can also be synthesized.","From animal fats or vegetable oils, or synthesized",1,0
+oleths,[],0,"A type of ethoxylated alcohol, can be derived from animal or plant sources.","Derived from animal or plant sources",1,0
+oleyl alcohol,[],0,"A fatty alcohol, can be synthesized or derived from animal fats/waxes.","Synthesized or from animal fats/waxes",1,0
+oleyl arachidate,[],0,"An ester, can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+oleyl imidazoline,[],0,"A surfactant. Can be synthetic or derived from animal sources.","Synthetic or from animal sources",1,0
+oleyl myristate,[],0,"An ester, can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+oleyl oleate,[],0,"An ester, can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+oleyl stearate,[],0,"An ester, can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+palmitamide,[],0,"An amide. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+palmitamine,[],0,"An amine. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+palmitate,[],0,"A salt or ester of palmitic acid. Can be synthesized or derived from animal fats or vegetable oils.","Synthesized or from animal fats/vegetable oils",1,0
+palmitic acid,[],0,"A fatty acid found in palm oil and animal fats. Can also be synthesized.","From palm oil or animal fats, or synthesized",1,0
+panthenol,[],0,"A precursor to Vitamin B5. Can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+panthenyl,[],0,"Related to panthenol. Can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+pearl essence,[],1,"A pearlescent substance derived from fish scales.","From fish scales",0,0
+pepsin,[],1,"An enzyme from the stomach lining of animals (usually pigs or cows).","From stomach lining of animals",0,0
+placenta,[],1,"Organ from pregnant mammals. Used in some cosmetics and hair products.","From pregnant mammals",0,0
+placenta polypeptides protein,[],1,"Proteins derived from the placenta.","From placenta",0,0
+polyglycerol,[],0,"A polymer of glycerol. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+polypeptides,[],0,"Chains of amino acids. Can be synthesized, plant-derived, or animal-derived.","Synthesized, plant-derived, or animal-derived",1,0
+polysorbates,[],0,"Emulsifiers, can be synthesized or derived from animal fats or plant oils.","Synthesized or from animal fats/plant oils",1,0
+pristane,[],0,"A hydrocarbon found in shark liver oil. Can also be synthesized.","From shark liver oil or synthesized",1,0
+progesterone,[],0,"A hormone, can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+propolis,[],1,"Resinous substance produced by bees.","Produced by bees",0,0
+provitamin a,[],0,"Precursor to Vitamin A. Can be synthesized or derived from animal or plant sources.","Synthesized or from animal/plant sources",1,0
+provitamin b-5,[],0,"Precursor to Vitamin B5 (pantothenic acid). Can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+provitamin d-2,[],0,"Precursor to Vitamin D2. Can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+provitamin d2,[],0,"Precursor to Vitamin D2. Can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+rennet,[],1,"Enzymes used in cheesemaking, typically from the stomach lining of calves.","From stomach lining of calves",0,0
+rennin,[],1,"Enzymes used in cheesemaking, typically from the stomach lining of calves.","From stomach lining of calves",0,0
+resinous glaze,[],1,"Often made from shellac, which is secreted by the lac beetle.","Secreted by lac beetle",0,0
+retinol,[],0,"A form of Vitamin A. Can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+ribonucleic acid,[],0,"Nucleic acid. Can be synthesized or derived from animal or plant sources.","Synthesized or from animal/plant sources",1,0
+rna,[],0,"Abbreviation for ribonucleic acid.","Synthesized or from animal/plant sources",1,0
+royal jelly,[],1,"Substance produced by bees to feed young.","Produced by bees",0,0
+sable brushes,[],1,"Brushes made from sable fur.","From sable fur",0,0
+sea sponge,[],1,"A marine animal. Used in sponges for bathing, etc.","Sea sponge",0,0
+sea turtle oil,[],1,"Oil extracted from sea turtles.","From sea turtles",0,0
+shark liver oil,[],1,"Oil extracted from shark livers.","From shark livers",0,0
+sheepskin,[],1,"Skin of sheep, used for leather or wool.","From sheep",0,0
+shellac,[],1,"Resinous secretion of the lac beetle. Used as a glaze or sealant.","From lac beetle secretion",0,0
+silk,[],1,"Fibers produced by silkworms. Used in textiles.","From silkworms",0,0
+silk powder,[],1,"Powder made from silk.","From silk (silkworms)",0,0
+snails,[],1,"Mollusks. Some are consumed as food, and their byproducts may be used.","Snails",0,0
+sodium caseinate,"[""Casein"", ""Caseinate"", ""Milk protein""]",1,"A salt of casein, derived from milk protein.","From milk",0,0
+sodium steroyl lactylate,[],0,"A synthetic emulsifier. Can be derived from animal or plant sources.","Synthetic or from animal/plant sources",1,0
+sodium tallowate,[],1,"Salt of tallow (rendered animal fat). Used in soaps.","From tallow (rendered animal fat)",0,0
+sperm oil,[],1,"Oil from the sperm whale.","From sperm whale",0,0
+spermaceti,[],1,"Waxy substance from the head of the sperm whale.","From sperm whale head",0,0
+sponge,[],1,"Can refer to sea sponges (animals) or synthetic sponges. Sea sponges are non-vegan.","Sea sponge (animal) or synthetic",1,0
+squalane,[],0,"A hydrogenated form of squalene. Commonly derived from shark liver oil or olives. Plant-derived is vegan.","From shark liver oil or olives",1,0
+squalene,[],0,"A hydrocarbon found in shark liver oil and olives. Plant-derived is vegan.","From shark liver oil or olives",1,0
+stearamide,[],0,"An amide. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+stearamine,[],0,"An amine. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+stearamine oxide,[],0,"A synthetic surfactant.","Synthetic",0,0
+stearates,[],0,"Salts or esters of stearic acid. Can be synthesized or derived from animal fats or vegetable oils.","Synthesized or from animal fats/vegetable oils",1,0
+stearic acid,[],0,"A fatty acid found in animal fats and vegetable oils. Can also be synthesized.","From animal fats or vegetable oils, or synthesized",1,0
+stearic hydrazide,[],0,"A chemical compound. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+stearone,[],0,"A ketone. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+stearoxytrimethylsilane,[],0,"A synthetic silicone.","Synthetic",0,0
+stearoyl lactylic acid,[],0,"An acid. Can be synthesized or derived from animal fats or plant oils.","Synthesized or from animal fats/plant oils",1,0
+stearyl acetate,[],0,"An ester. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+stearyl alcohol,[],0,"A fatty alcohol. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+stearyl betaine,[],0,"A synthetic surfactant.","Synthetic",0,0
+stearyl caprylate,[],0,"An ester. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+stearyl citrate,[],0,"An ester. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+stearyl glycyrrhetinate,[],0,"A derivative of stearyl alcohol and glycyrrhetinic acid. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+stearyl heptanoate,[],0,"An ester. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+stearyl imidazoline,[],0,"A surfactant. Can be synthetic or derived from animal sources.","Synthetic or from animal sources",1,0
+stearyl octanoate,[],0,"An ester. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+stearyl oleate,[],0,"An ester. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+stearyl stearate,[],0,"An ester. Can be synthesized or derived from animal fats.","Synthesized or from animal fats",1,0
+stearyldimethyl amine,[],0,"A synthetic amine.","Synthetic",0,0
+steroids,[],0,"Can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+sterols,[],0,"Can be synthesized or derived from animal or plant sources.","Synthesized or from animal/plant sources",1,0
+suede,[],1,"Leather that has been buffed to create a soft, napped surface.","From animal hides",0,0
+tallow,[],1,"Rendered solid fat from cattle or sheep.","From cattle or sheep",0,0
+tallow acid,[],1,"Fatty acid derived from tallow.","From tallow (rendered animal fat)",0,0
+tallow amide,[],1,"Amide derived from tallow.","From tallow (rendered animal fat)",0,0
+tallow amine,[],1,"Amine derived from tallow.","From tallow (rendered animal fat)",0,0
+tallow fatty alcohol,[],1,"Fatty alcohol derived from tallow.","From tallow (rendered animal fat)",0,0
+tallow glycerides,[],1,"Glycerides derived from tallow.","From tallow (rendered animal fat)",0,0
+tallow eth-6,[],1,"A surfactant derived from tallow.","From tallow (rendered animal fat)",0,0
+triterpene alcohols,[],0,"A class of organic compounds. Can be synthesized or derived from plant or animal sources.","Synthesized or from plant/animal sources",1,0
+turtle oil,[],1,"Oil extracted from turtles.","From turtles",0,0
+tyrosine,[],0,"An amino acid. Can be synthesized, plant-derived, or animal-derived.","Synthesized, plant-derived, or animal-derived",1,0
+urea,"[""Carbamide""]",0,"A compound found in urine of mammals and also synthesized. Used in cosmetics and fertilizers.","Synthesized or from urine of mammals",1,0
+uric acid,[],0,"A compound found in urine and blood. Can be synthesized.","From urine/blood or synthesized",1,0
+vitamin a,[],0,"Can be synthesized or derived from animal sources (like fish liver oil or eggs).","Synthesized or from animal sources",1,0
+vitamin b factor,[],0,"General term for B vitamins. Some can be synthesized, others derived from animal sources.","Synthesized or from animal sources",1,0
+vitamin b-complex factor,[],0,"General term for B vitamins. Some can be synthesized, others derived from animal sources.","Synthesized or from animal sources",1,0
+vitamin b12,[],0,"A B vitamin. Can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+vitamin d,[],0,"Can be synthesized or derived from animal sources (like fish liver oil) or plant sources.","Synthesized or from animal/plant sources",1,0
+vitamin d2,[],0,"A form of Vitamin D. Typically vegan, but can be synthesized.","Synthesized or from plant/animal sources",1,0
+vitamin d3,[],0,"A form of Vitamin D. Can be synthesized or derived from animal sources (like lanolin).","Synthesized or from animal sources",1,0
+vitamin h,[],0,"Another name for Biotin. Can be synthesized or derived from animal sources.","Synthesized or from animal sources",1,0
+wax,[],0,"Can refer to animal waxes (beeswax, lanolin) or plant waxes (carnauba).","Animal or plant origin",1,0
+whey,[],1,"Liquid byproduct of cheesemaking, contains milk proteins.","From milk",0,0
+wool,[],1,"Fiber from sheep's fleece.","From sheep",0,0
+wool fat,[],0,"Another name for lanolin, derived from sheep's wool.","From sheep's wool",1,0
+wool wax,[],0,"Another name for lanolin, derived from sheep's wool.","From sheep's wool",1,0

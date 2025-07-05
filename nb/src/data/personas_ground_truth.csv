@@ -1,0 +1,6 @@
+recipe_id,title,ingredients,is_vegan,vegan_reasoning,animal_ingredients_found,is_keto,keto_reasoning,high_carb_ingredients_found
+1,Chicken Breast with Vegetables,"[""chicken breast"", ""olive oil"", ""broccoli"", ""carrots""]",false,"Contains chicken breast which is an animal product",["chicken breast"],true,"Low carb ingredients, primarily protein and vegetables",[]
+2,Vegetarian Pasta,"[""pasta"", ""tomato sauce"", ""onions"", ""garlic"", ""olive oil""]",true,"All ingredients are plant-based",[],false,"Contains pasta which is high in carbohydrates",["pasta"]
+3,Keto Avocado Salad,"[""avocado"", ""olive oil"", ""lemon juice"", ""salt"", ""pepper""]",true,"All ingredients are plant-based",[],true,"All ingredients are low carb",[]
+4,Beef Stir Fry,"[""beef"", ""soy sauce"", ""vegetables"", ""sesame oil""]",false,"Contains beef which is an animal product",["beef"],false,"Contains soy sauce which may have hidden carbs",["soy sauce"]
+5,Vegan Buddha Bowl,"[""quinoa"", ""chickpeas"", ""kale"", ""sweet potato"", ""tahini""]",true,"All ingredients are plant-based",[],false,"Contains quinoa and sweet potato which are high in carbs",["quinoa", "sweet potato"] 

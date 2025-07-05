@@ -1,0 +1,19 @@
+# Argmax Must-Have Requirements
+Flask[async]==3.0.2
+opensearch-py==2.8.0
+python-decouple==3.8
+requests==2.32.3
+pandas==2.2.3
+pyarrow==19.0.1
+
+# Core Dependencies for Shared Modules
+sqlalchemy
+loguru
+ollama
+ingredient-parser-nlp
+
+# Optional Dependencies (graceful degradation if missing)
+rapidfuzz
+python-dotenv
+numba
+tqdm

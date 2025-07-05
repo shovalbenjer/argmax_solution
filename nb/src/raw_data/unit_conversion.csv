@@ -1,0 +1,16 @@
+Unit,Abbreviation,US Value,Metric Equivalent,Notes,Type,Factor,StandardUnit
+teaspoon,tsp,1 tsp,4.93 ml,,volume,4.92892,ml
+tablespoon,tbsp,3 tsp,14.79 ml,,volume,14.7868,ml
+fluid ounce,fl oz,2 tbsp,29.57 ml,,volume,29.5735,ml
+cup,c,8 fl oz,236.59 ml,,volume,236.588,ml
+pint,pt,2 cups,473.18 ml,,volume,473.176,ml
+quart,qt,2 pints,946.35 ml,,volume,946.353,ml
+gallon,gal,4 quarts,3.785 liters,,volume,3785.41,ml
+ounce,oz,1/16 pound,28.35 g,weight,weight,28.3495,g
+pound,lb,16 ounces,453.59 g,weight,weight,453.592,g
+gram,g,0.035 ounces,1 g,weight,weight,1.0,g
+kilogram,kg,2.205 pounds,1000 g,weight,weight,1000.0,g
+stick butter,,1/2 cup,113 g,"US butter, typically weight",weight,113.0,g
+dash,,,,"approx 0.62 ml, treat as volume",volume,0.616115,ml
+pinch,,,,"approx 0.31 ml, treat as volume",volume,0.308058,ml
+smidgen,,,,"approx 0.15 ml, treat as volume",volume,0.154029,ml

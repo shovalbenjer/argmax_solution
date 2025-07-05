@@ -1,0 +1,122 @@
+services:
+  os:
+    image: opensearchproject/opensearch:latest
+    container_name: os
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - DISABLE_SECURITY_PLUGIN=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - "OPENSEARCH_INITIAL_ADMIN_PASSWORD=Argmax123!"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    networks:
+      - argmax-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/roo
+    networks:
+      - argmax-net
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - argmax-net
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+  mlflow:
+    image: python:3.11-slim
+    container_name: mlflow
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    networks:
+      - argmax-net
+    command: >
+      sh -c "pip install mlflow boto3 &&
+             mlflow server
+             --host 0.0.0.0
+             --port 5000
+             --backend-store-uri /mlflow"
+
+#   web:
+#     build:
+#       context: .
+#       dockerfile: web/Dockerfile
+#     container_name: web
+#     ports:
+#       - "8080:8080"
+#     volumes:
+#       - ./web/src:/app
+#     networks:
+#       - argmax-net
+#     depends_on:
+#       - os
+#     environment:
+#       - OPENSEARCH_URL=http://os:9200
+#       - FLASK_APP=app.py
+#       - FLASK_RUN_HOST=0.0.0.0
+#       - FLASK_RUN_PORT=8080
+
+  nb:
+    build:
+      context: .
+      dockerfile: nb/Dockerfile
+    container_name: nb
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./nb:/usr/src/app
+    working_dir: /usr/src/app
+    networks:
+      - argmax-net
+    depends_on:
+      - os
+      - ollama
+      - redis
+      - mlflow
+    environment:
+      - OPENSEARCH_URL=http://os:9200
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - OLLAMA_HOST=http://ollama:11434
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+volumes:
+  opensearch-data:
+  ollama-data:
+  redis-data:
+  mlflow-data:
+
+networks:
+  argmax-net:
+    driver: bridge
