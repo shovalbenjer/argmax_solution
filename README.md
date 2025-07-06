@@ -1,11 +1,11 @@
-# Search By Ingredients Challenge - SOTA Semantic Architecture
+# Search By Ingredients Challenge - Semantic Architecture
 ![Argmax](https://argmaxml.com/wp-content/uploads/2024/04/Argmax_logo_inline.svg)
 
 ### **Project Overview**
 
 This project implements a **State-of-the-Art (SOTA) Semantic Classification System** for categorizing recipes as **Vegan** and **Keto-friendly**. The architecture leverages cutting-edge semantic matching, Arctic Text2SQL models, and a sophisticated dual-database strategy to achieve exceptional accuracy on complex, real-world recipe ingredients.
 
-## **SOTA Semantic Architecture**
+## **Semantic Architecture**
 
 ### **Pipeline: Recipe Ingredient → ingredient-parser → Arctic Semantic SQL → Database → Fuzzy Fallback → Qwen**
 
