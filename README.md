@@ -43,7 +43,7 @@ Raw Recipe Ingredient: "3 pounds pork shoulder, cut into chunks"
 *   **Semantic Search (`ingredient-parser`):** 97.8% accuracy ingredient extraction from complex recipe strings
 *   **Cache Management (`Redis`):** High-performance caching for instant classification responses
 
-### **🧠 Advanced Models & Capabilities**
+### **Advanced Models & Capabilities**
 
 #### **Ingredient Parsing (`ingredient-parser-nlp`)**
 *   **Capability:** Extracts clean ingredient names from complex recipe text
@@ -68,7 +68,7 @@ Raw Recipe Ingredient: "3 pounds pork shoulder, cut into chunks"
 *   **Features:** Instruction following, reasoning, and "thinking mode" for complex decisions
 *   **Advantage:** Balances speed (local execution) with sophisticated reasoning
 
-### **🏗️ System Architecture: Hybrid Retrieval Cascade**
+### **System Architecture: Hybrid Retrieval Cascade**
 
 The system implements a sophisticated **"SOTA Semantic Cascade"** for maximum accuracy:
 
