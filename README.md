@@ -1,4 +1,5 @@
-# **IngredientSense: SOTA Semantic Classification for Recipes**
+# Search By Ingredients Challenge - Semantic Architecture
+![Argmax](https://argmaxml.com/wp-content/uploads/2024/04/Argmax_logo_inline.svg)
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
 ![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)
